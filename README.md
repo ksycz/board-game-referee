@@ -4,6 +4,8 @@ A small web app that acts as a **rules referee** for board games. Upload a ruleb
 
 Built as a first agent project: four connected agents, retrieval over chunked PDFs, and a deployable FastAPI + React stack.
 
+Copyright © 2026 Katarzyna Vaňous. Released under the [MIT License](LICENSE).
+
 **New here?** See [USAGE.md](USAGE.md) for a step-by-step guide to uploading rulebooks, asking questions, and reading rulings.
 
 ## How it works
