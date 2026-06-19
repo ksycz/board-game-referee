@@ -42,6 +42,40 @@ def _is_heading(line: str) -> bool:
     return title_like and len(words) <= 6
 
 
+def _is_junk_paragraph(text: str) -> bool:
+    """Drop page numbers, headers without body text, and other PDF noise."""
+    stripped = text.strip()
+    if not stripped:
+        return True
+    if re.fullmatch(r"[\d\s\-–—]+", stripped):
+        return True
+    if re.fullmatch(r"\d{1,3}", stripped):
+        return True
+
+    words = re.findall(r"\w+", stripped)
+    has_sentence = any(mark in stripped for mark in ".?!")
+    if len(words) < 3 and not has_sentence:
+        return True
+    if len(stripped) < 24 and len(words) < 5 and not has_sentence:
+        return True
+    return False
+
+
+def _extract_page_text(page: fitz.Page) -> str:
+    """Extract page text in reading order (top-to-bottom, left-to-right)."""
+    blocks = page.get_text("blocks")
+    lines: list[str] = []
+    for block in sorted(blocks, key=lambda item: (round(item[1]), round(item[0]))):
+        if block[6] != 0:
+            continue
+        text = block[4].strip()
+        if text:
+            lines.append(text)
+    if lines:
+        return "\n".join(lines)
+    return page.get_text("text")
+
+
 def _split_by_sentences(text: str, max_chars: int) -> list[str]:
     if len(text) <= max_chars:
         return [text]
@@ -157,6 +191,9 @@ def chunk_page_text(
                 flush()
             current_section = section
 
+        if _is_junk_paragraph(paragraph):
+            continue
+
         if len(paragraph) > max_chars:
             flush()
             for piece in _split_by_sentences(paragraph, max_chars):
@@ -173,7 +210,7 @@ def chunk_page_text(
         current_len += extra
 
     flush()
-    return chunks
+    return [chunk for chunk in chunks if not _is_junk_paragraph(chunk.text)]
 
 
 def extract_chunks(
@@ -189,7 +226,7 @@ def extract_chunks(
     try:
         for index in range(len(doc)):
             page = doc[index]
-            text = page.get_text("text")
+            text = _extract_page_text(page)
             page_chunks = chunk_page_text(
                 index + 1,
                 text,

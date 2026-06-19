@@ -79,6 +79,12 @@ def _query_terms(query: str) -> list[str]:
         terms.extend(["winner", "victory"])
     if "turn" in lowered:
         terms.append("turn")
+    if "action" in lowered or "actions" in lowered:
+        terms.extend(["action", "actions", "choose"])
+    if "phase" in lowered:
+        terms.append("phase")
+    if "type" in lowered:
+        terms.append("type")
 
     return list(dict.fromkeys(terms))
 
@@ -260,7 +266,35 @@ class VectorStore:
                 )
 
         ranked = sorted(merged.values(), key=lambda chunk: chunk.score or 0.0, reverse=True)
-        return ranked[:top_k]
+        return self._apply_substance_boost(ranked[:top_k])
+
+    def _substance_weight(self, text: str) -> float:
+        length = len(text.strip())
+        if length >= 120:
+            return 1.0
+        if length >= 60:
+            return 0.9
+        if length >= 30:
+            return 0.75
+        return 0.4
+
+    def _apply_substance_boost(self, chunks: list[StoredChunk]) -> list[StoredChunk]:
+        if not chunks:
+            return chunks
+        adjusted: list[StoredChunk] = []
+        for chunk in chunks:
+            weight = self._substance_weight(chunk.text)
+            adjusted.append(
+                StoredChunk(
+                    chunk_id=chunk.chunk_id,
+                    page=chunk.page,
+                    text=chunk.text,
+                    section_hint=chunk.section_hint,
+                    score=(chunk.score or 0.0) * weight,
+                )
+            )
+        adjusted.sort(key=lambda item: item.score or 0.0, reverse=True)
+        return adjusted
 
     def list_chunks(self, rulebook_id: str, limit: int = 24) -> list[StoredChunk]:
         collection = self._collection(rulebook_id)

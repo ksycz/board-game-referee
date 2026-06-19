@@ -80,6 +80,31 @@ Players take turns in clockwise order.
     assert "clockwise order" in chunks[0].text
 
 
+def test_page_number_only_text_is_not_indexed():
+    page_text = """Choose Actions
+
+2
+"""
+    chunks = chunk_page_text(1, page_text, max_chars=600, min_chars=80)
+
+    assert chunks == []
+
+
+def test_section_body_kept_when_page_number_noise_present():
+    page_text = """Choose Actions
+
+2
+
+On your turn, choose one action from the list shown on your player board.
+"""
+    chunks = chunk_page_text(1, page_text, max_chars=600, min_chars=80)
+
+    assert len(chunks) == 1
+    assert chunks[0].section_hint == "Choose Actions"
+    assert "choose one action" in chunks[0].text
+    assert chunks[0].text.strip() != "2"
+
+
 def test_multi_page_pdf_reports_page_count(tmp_path):
     pdf = tmp_path / "multi.pdf"
     _make_pdf(

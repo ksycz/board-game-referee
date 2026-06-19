@@ -52,3 +52,27 @@ def test_reindex_replaces_existing_chunks(isolated_data):
     hits = vs.search(rulebook_id, "first turn", top_k=1)
     assert len(hits) == 1
     assert hits[0].page == 2
+
+
+def test_search_deprioritizes_very_short_chunks(isolated_data):
+    vs = VectorStore()
+    rulebook_id = "substance-book"
+    vs.index_rulebook(
+        rulebook_id,
+        [
+            TextChunk(page=10, text="2", section_hint="Choose Actions"),
+            TextChunk(
+                page=10,
+                text=(
+                    "On your turn, choose one action. Each turn has multiple phases "
+                    "including choosing actions and resolving effects."
+                ),
+                section_hint="Choose Actions",
+            ),
+        ],
+    )
+
+    hits = vs.search(rulebook_id, "What are the turn types?", top_k=1)
+
+    assert len(hits) == 1
+    assert "choose one action" in hits[0].text.lower()
