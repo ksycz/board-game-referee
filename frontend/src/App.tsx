@@ -618,6 +618,7 @@ function RefereeAnswer({ data }: { data: AskResponse }) {
         </div>
       ) : (
         <div className="ruling-header">
+          {data.cached && <span className="badge cache">From cache</span>}
           {isDispute && ruling.favors && (
             <span className={`badge favors favors-${ruling.favors}`}>
               {favorsLabel(ruling.favors)}

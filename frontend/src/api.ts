@@ -41,15 +41,29 @@ export type HistoryMessage = {
 
 export type RulingFavors = "player_a" | "player_b" | "split" | "neither" | "unclear";
 
+export type RetrievalMetrics = {
+  retrieved_pages: number[];
+  cited_pages: number[];
+  cited_in_retrieval: number[];
+  cited_missing_from_retrieval: number[];
+  citation_recall: number | null;
+  citations_checked: number;
+  citations_valid: number;
+  citation_pass_rate: number | null;
+  all_citations_valid: boolean;
+};
+
 export type AskResponse = {
   mode: "ask" | "dispute";
+  cached?: boolean;
+  cached_at?: string;
   rulebook_id: string;
   rulebook_name: string;
   question?: string;
   situation?: string;
   player_a?: string;
   player_b?: string;
-  retrieval: { chunks_found: number; pages: number[] };
+  retrieval: { chunks_found: number; pages: number[]; metrics?: RetrievalMetrics };
   ruling: {
     ruling: string;
     confidence: "high" | "medium" | "low";

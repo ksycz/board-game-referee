@@ -674,6 +674,11 @@ body::before {
   color: #4338ca;
 }
 
+.badge.cache {
+  background: #ecfdf5;
+  color: #047857;
+}
+
 .badge.favors-player_a,
 .badge.favors-player_b {
   background: color-mix(in srgb, var(--accent) 18%, white);

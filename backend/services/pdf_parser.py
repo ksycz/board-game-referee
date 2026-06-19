@@ -176,7 +176,12 @@ def chunk_page_text(
     return chunks
 
 
-def extract_chunks(pdf_path: Path) -> tuple[list[TextChunk], int]:
+def extract_chunks(
+    pdf_path: Path,
+    *,
+    max_chars: int = CHUNK_MAX_CHARS,
+    min_chars: int = CHUNK_MIN_CHARS,
+) -> tuple[list[TextChunk], int]:
     """Extract searchable chunks from a PDF and return (chunks, page_count)."""
     doc = fitz.open(pdf_path)
     chunks: list[TextChunk] = []
@@ -185,7 +190,12 @@ def extract_chunks(pdf_path: Path) -> tuple[list[TextChunk], int]:
         for index in range(len(doc)):
             page = doc[index]
             text = page.get_text("text")
-            page_chunks = chunk_page_text(index + 1, text)
+            page_chunks = chunk_page_text(
+                index + 1,
+                text,
+                max_chars=max_chars,
+                min_chars=min_chars,
+            )
             if page_chunks:
                 pages_with_text += 1
                 chunks.extend(page_chunks)

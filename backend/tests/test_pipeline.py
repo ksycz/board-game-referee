@@ -12,8 +12,10 @@ class CapturingReferee:
         self.question: str | None = None
         self.history: list[dict] | None = None
         self.chunks: list[StoredChunk] | None = None
+        self.calls = 0
 
     def rule_on(self, question: str, chunks: list[StoredChunk], history: list[dict] | None = None) -> dict:
+        self.calls += 1
         self.question = question
         self.history = history
         self.chunks = chunks
@@ -58,6 +60,24 @@ def test_pipeline_ask_passes_trimmed_history_to_referee(sample_pdf, isolated_dat
     assert result["ruling"]["ruling"] == "Ruling for What about the first turn?"
 
 
+def test_pipeline_ask_includes_retrieval_metrics(sample_pdf, isolated_data):
+    pipeline = RefereePipeline()
+    upload = pipeline.upload_rulebook(
+        "Test Game", "test.pdf", sample_pdf.read_bytes(), original_filename="sample-rulebook.pdf"
+    )
+    book_id = upload["rulebook"].id
+
+    capturing = CapturingReferee()
+    pipeline._referee = capturing
+
+    result = pipeline.ask(book_id, "Can I attack on the first turn?")
+
+    metrics = result["retrieval"]["metrics"]
+    assert "retrieved_pages" in metrics
+    assert "citation_pass_rate" in metrics
+    assert metrics["citations_checked"] >= 0
+
+
 def test_pipeline_ask_retrieves_with_follow_up_query(sample_pdf, isolated_data):
     pipeline = RefereePipeline()
     upload = pipeline.upload_rulebook(
@@ -96,3 +116,25 @@ def test_retrieval_query_improves_follow_up_hits(sample_pdf, isolated_data):
     hits = pipeline.retrieval.retrieve(book_id, follow_up_query, 3)
     texts = " ".join(chunk.text.lower() for chunk in hits["chunks"])
     assert "first turn" in texts
+
+
+def test_pipeline_ask_returns_cached_answer_without_second_llm_call(
+    sample_pdf,
+    isolated_data,
+):
+    pipeline = RefereePipeline()
+    upload = pipeline.upload_rulebook(
+        "Test Game", "test.pdf", sample_pdf.read_bytes(), original_filename="sample-rulebook.pdf"
+    )
+    book_id = upload["rulebook"].id
+
+    capturing = CapturingReferee()
+    pipeline._referee = capturing
+
+    first = pipeline.ask(book_id, "Can I attack on the first turn?")
+    second = pipeline.ask(book_id, "  can i attack on the first turn?  ")
+
+    assert capturing.calls == 1
+    assert not first.get("cached")
+    assert second["cached"] is True
+    assert second["ruling"]["ruling"] == first["ruling"]["ruling"]

@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
 
 import chromadb
 from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
@@ -151,10 +152,12 @@ class StoredChunk:
 
 
 class VectorStore:
-    def __init__(self) -> None:
+    def __init__(self, chroma_dir: Path | None = None) -> None:
         ensure_dirs()
+        self._chroma_dir = chroma_dir or CHROMA_DIR
+        self._chroma_dir.mkdir(parents=True, exist_ok=True)
         self._client = chromadb.PersistentClient(
-            path=str(CHROMA_DIR),
+            path=str(self._chroma_dir),
             settings=Settings(anonymized_telemetry=False),
         )
 
@@ -170,6 +173,10 @@ class VectorStore:
         if collection.count() > 0:
             self.delete_rulebook(rulebook_id)
 
+        if not chunks:
+            return 0
+
+        collection = self._collection(rulebook_id)
         ids: list[str] = []
         documents: list[str] = []
         metadatas: list[dict] = []
@@ -184,9 +191,6 @@ class VectorStore:
                     "section_hint": chunk.section_hint or "",
                 }
             )
-
-        if not ids:
-            return 0
 
         collection.add(ids=ids, documents=documents, metadatas=metadatas)
         return len(ids)
