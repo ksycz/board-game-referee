@@ -104,7 +104,7 @@ docker compose up --build
 ## Project layout
 
 ```
-board-game-ruler/
+board-game-referee/
 ├── backend/
 │   ├── agents/
 │   │   ├── ingestion_agent.py
