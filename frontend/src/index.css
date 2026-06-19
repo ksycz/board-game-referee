@@ -1,0 +1,262 @@
+:root {
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  line-height: 1.5;
+  color: #1a1a1a;
+  background: #f4efe6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.app {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 2rem;
+}
+
+header p {
+  margin: 0.25rem 0 1.5rem;
+  color: #5c5348;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 1rem;
+  min-height: 70vh;
+}
+
+.sidebar,
+.chat {
+  background: #fffdf8;
+  border: 1px solid #d9cfc0;
+  border-radius: 12px;
+  padding: 1rem;
+}
+
+.sidebar section + section {
+  margin-top: 1.5rem;
+}
+
+.sidebar h2,
+.chat-header h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6b5d4f;
+}
+
+.sidebar input[type="text"] {
+  width: 100%;
+  margin-bottom: 0.5rem;
+  padding: 0.5rem;
+  border: 1px solid #d9cfc0;
+  border-radius: 8px;
+}
+
+.upload-btn {
+  display: inline-block;
+  padding: 0.5rem 0.75rem;
+  background: #2f5d3a;
+  color: white;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.book-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.book-list li {
+  display: flex;
+  align-items: stretch;
+  margin-bottom: 0.35rem;
+}
+
+.book-list li button:first-child {
+  flex: 1;
+  text-align: left;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 8px;
+  padding: 0.5rem;
+  cursor: pointer;
+}
+
+.book-list li.active button:first-child {
+  background: #e8f0e9;
+  border-color: #2f5d3a;
+}
+
+.book-list li strong {
+  display: block;
+}
+
+.book-list li span {
+  font-size: 0.8rem;
+  color: #6b5d4f;
+}
+
+.book-list .delete {
+  border: none;
+  background: transparent;
+  color: #9a3b3b;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0 0.4rem;
+}
+
+.chat {
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-header {
+  border-bottom: 1px solid #ece3d6;
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-bottom: 1rem;
+}
+
+.bubble {
+  max-width: 90%;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+}
+
+.bubble.user {
+  align-self: flex-end;
+  background: #2f5d3a;
+  color: white;
+}
+
+.bubble.referee {
+  align-self: flex-start;
+  background: #f7f2ea;
+  border: 1px solid #e2d8c8;
+}
+
+.ruling {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0.5rem 0;
+}
+
+.reasoning {
+  color: #4a433a;
+  margin: 0 0 0.75rem;
+}
+
+.ruling-header {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.badge {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: #ddd;
+}
+
+.badge.high { background: #d4ead8; color: #1f4a28; }
+.badge.medium { background: #f5e6c8; color: #6b4e12; }
+.badge.low { background: #f0d4d4; color: #7a2b2b; }
+.badge.warn { background: #f5e6c8; color: #6b4e12; }
+
+.citations blockquote {
+  margin: 0.5rem 0;
+  padding-left: 0.75rem;
+  border-left: 3px solid #2f5d3a;
+  color: #3d362f;
+}
+
+.citations blockquote.invalid {
+  border-left-color: #b54a4a;
+}
+
+.citations footer {
+  font-size: 0.8rem;
+  color: #6b5d4f;
+  margin-bottom: 0.25rem;
+}
+
+.ask-form {
+  display: flex;
+  gap: 0.5rem;
+  border-top: 1px solid #ece3d6;
+  padding-top: 0.75rem;
+}
+
+.ask-form input {
+  flex: 1;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #d9cfc0;
+  border-radius: 8px;
+}
+
+.ask-form button {
+  padding: 0.65rem 1rem;
+  background: #2f5d3a;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.ask-form button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.muted, .hint, .empty {
+  color: #6b5d4f;
+}
+
+.error {
+  margin-top: 0.75rem;
+  color: #9a3b3b;
+  background: #fceaea;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+}
+
+details pre {
+  font-size: 0.7rem;
+  overflow-x: auto;
+  background: #1a1a1a;
+  color: #e8e8e8;
+  padding: 0.75rem;
+  border-radius: 8px;
+}
+
+@media (max-width: 800px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
