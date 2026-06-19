@@ -8,6 +8,7 @@ import re
 import anthropic
 
 from config import ANTHROPIC_API_KEY, MODEL
+from services.conversation import format_history_block
 from services.vector_store import StoredChunk
 
 SYSTEM_PROMPT = """You are a board game rules referee. Your job is to settle rules disputes clearly and fairly.
@@ -18,6 +19,7 @@ Rules:
 - Every factual claim must have a citation with the exact page number from the excerpts.
 - Quote the relevant rule text briefly in each citation.
 - If multiple interpretations exist, explain them and cite which passage supports each.
+- If conversation history is provided, treat the current question as a follow-up and use that context.
 - Be concise. Players at the table want a fast, confident answer.
 
 Respond with valid JSON only (no markdown fences):
@@ -65,7 +67,12 @@ class RefereeAgent:
             raise ValueError("ANTHROPIC_API_KEY is required")
         self.client = anthropic.Anthropic(api_key=key)
 
-    def rule_on(self, question: str, chunks: list[StoredChunk]) -> dict:
+    def rule_on(
+        self,
+        question: str,
+        chunks: list[StoredChunk],
+        history: list[dict] | None = None,
+    ) -> dict:
         if not chunks:
             return {
                 "agent": "referee",
@@ -77,6 +84,7 @@ class RefereeAgent:
                 "clarification_question": None,
             }
 
+        history_block = format_history_block(history or [])
         try:
             message = self.client.messages.create(
                 model=MODEL,
@@ -86,7 +94,8 @@ class RefereeAgent:
                     {
                         "role": "user",
                         "content": (
-                            f"Question: {question}\n\n"
+                            f"{history_block}"
+                            f"Current question: {question}\n\n"
                             f"Rulebook excerpts:\n\n{_format_context(chunks)}"
                         ),
                     }

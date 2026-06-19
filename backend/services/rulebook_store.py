@@ -61,7 +61,7 @@ class RulebookStore:
         book = self._rulebooks.pop(rulebook_id, None)
         if not book:
             return False
-        pdf_path = self.pdf_path(rulebook_id)
+        pdf_path = RULEBOOKS_DIR / book.filename
         if pdf_path.exists():
             pdf_path.unlink()
         self._save()

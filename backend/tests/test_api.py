@@ -64,3 +64,27 @@ def test_ask_without_api_key_returns_error(client):
     assert res.status_code in (400, 500)
     detail = res.json()["detail"].lower()
     assert "anthropic" in detail or "api_key" in detail
+
+
+def test_ask_accepts_optional_history(client):
+    with SAMPLE_PDF.open("rb") as f:
+        upload = client.post(
+            "/api/rulebooks",
+            files={"file": ("sample-rulebook.pdf", f, "application/pdf")},
+            data={"name": "Test Game"},
+        )
+    book_id = upload.json()["rulebook"]["id"]
+
+    res = client.post(
+        f"/api/rulebooks/{book_id}/ask",
+        json={
+            "question": "What about on the first turn?",
+            "history": [
+                {"role": "user", "content": "Can I attack on my turn?"},
+                {"role": "assistant", "content": "Yes, during the attack phase."},
+            ],
+        },
+    )
+    assert res.status_code in (400, 500)
+    detail = res.json()["detail"].lower()
+    assert "anthropic" in detail or "api_key" in detail

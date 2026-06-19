@@ -59,6 +59,16 @@ Your reply is sent together with the original question so the referee can give a
 
 Click **Ask something else instead** if you want to dismiss the follow-up and ask a new question.
 
+## Follow-up questions
+
+The referee remembers your conversation **per rulebook**. After an answer, you can ask short follow-ups like:
+
+- *What about on the first turn?*
+- *Does that apply to two players?*
+- *What if I already drew a card?*
+
+Switch between rulebooks in the sidebar — each keeps its own chat history. Click **New conversation** to start fresh on the current game.
+
 ## Tips for better answers
 
 - **Be specific** — "Can I attack on the first turn?" works better than "Is this allowed?"

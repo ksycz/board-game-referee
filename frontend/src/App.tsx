@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AskResponse,
+  HistoryMessage,
   Rulebook,
   askRulebook,
   deleteRulebook,
@@ -17,27 +18,54 @@ type ClarificationContext = {
   question: string;
 };
 
+function buildHistory(messages: Message[]): HistoryMessage[] {
+  return messages.map((msg) =>
+    msg.role === "user"
+      ? { role: "user", content: msg.text }
+      : { role: "assistant", content: msg.data.ruling.ruling },
+  );
+}
+
 export default function App() {
   const [rulebooks, setRulebooks] = useState<Rulebook[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [threads, setThreads] = useState<Record<string, Message[]>>({});
+  const [clarifications, setClarifications] = useState<Record<string, ClarificationContext | null>>({});
   const [question, setQuestion] = useState("");
   const [uploadName, setUploadName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [clarification, setClarification] = useState<ClarificationContext | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const messages = selectedId ? threads[selectedId] ?? [] : [];
+  const clarification = selectedId ? clarifications[selectedId] ?? null : null;
+
+  const updateThread = useCallback((rulebookId: string, updater: (prev: Message[]) => Message[]) => {
+    setThreads((current) => ({
+      ...current,
+      [rulebookId]: updater(current[rulebookId] ?? []),
+    }));
+  }, []);
+
+  const setClarificationFor = useCallback((rulebookId: string, value: ClarificationContext | null) => {
+    setClarifications((current) => ({
+      ...current,
+      [rulebookId]: value,
+    }));
+  }, []);
 
   const refresh = useCallback(async () => {
     const books = await listRulebooks();
     setRulebooks(books);
-    if (!selectedId && books.length > 0) {
-      setSelectedId(books[0].id);
-    }
-  }, [selectedId]);
+    return books;
+  }, []);
 
   useEffect(() => {
-    refresh().catch((e) => setError(String(e)));
+    refresh()
+      .then((books) => {
+        setSelectedId((current) => current ?? books[0]?.id ?? null);
+      })
+      .catch((e) => setError(String(e)));
   }, [refresh]);
 
   useEffect(() => {
@@ -48,6 +76,13 @@ export default function App() {
 
   const selected = rulebooks.find((b) => b.id === selectedId);
 
+  function clearConversation(rulebookId: string) {
+    updateThread(rulebookId, () => []);
+    setClarificationFor(rulebookId, null);
+    setQuestion("");
+    setError(null);
+  }
+
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -57,8 +92,7 @@ export default function App() {
       const book = await uploadRulebook(file, uploadName || undefined);
       setUploadName("");
       setSelectedId(book.id);
-      setMessages([]);
-      setClarification(null);
+      clearConversation(book.id);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -75,24 +109,22 @@ export default function App() {
     const reply = question.trim();
     setQuestion("");
 
-    const asked = clarification
-      ? `Original question: ${clarification.originalQuestion}\n\nClarification (${clarification.question}): ${reply}`
-      : reply;
+    const history = buildHistory(messages);
+    updateThread(selectedId, (current) => [...current, { role: "user", text: reply }]);
 
-    setMessages((m) => [...m, { role: "user", text: reply }]);
     setLoading(true);
     setError(null);
     try {
-      const answer = await askRulebook(selectedId, asked);
+      const answer = await askRulebook(selectedId, reply, history);
       if (answer.ruling.needs_clarification && answer.ruling.clarification_question) {
-        setClarification({
+        setClarificationFor(selectedId, {
           originalQuestion: clarification?.originalQuestion ?? reply,
           question: answer.ruling.clarification_question,
         });
       } else {
-        setClarification(null);
+        setClarificationFor(selectedId, null);
       }
-      setMessages((m) => [...m, { role: "referee", data: answer }]);
+      updateThread(selectedId, (current) => [...current, { role: "referee", data: answer }]);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -103,14 +135,24 @@ export default function App() {
   async function handleDelete(id: string) {
     if (!confirm("Delete this rulebook?")) return;
     setLoading(true);
+    setError(null);
     try {
       await deleteRulebook(id);
-      if (selectedId === id) {
-        setSelectedId(null);
-        setMessages([]);
-        setClarification(null);
-      }
-      await refresh();
+      setThreads((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+      setClarifications((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+      setRulebooks((current) => {
+        const next = current.filter((book) => book.id !== id);
+        setSelectedId((selected) => (selected === id ? (next[0]?.id ?? null) : selected));
+        return next;
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -147,11 +189,20 @@ export default function App() {
             <ul className="book-list">
               {rulebooks.map((book) => (
                 <li key={book.id} className={book.id === selectedId ? "active" : ""}>
-                  <button type="button" onClick={() => { setSelectedId(book.id); setMessages([]); setClarification(null); }}>
+                  <button type="button" onClick={() => setSelectedId(book.id)}>
                     <strong>{book.name}</strong>
                     <span>{book.page_count} pages</span>
                   </button>
-                  <button type="button" className="delete" onClick={() => handleDelete(book.id)}>×</button>
+                  <button
+                    type="button"
+                    className="delete"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleDelete(book.id);
+                    }}
+                  >
+                    ×
+                  </button>
                 </li>
               ))}
             </ul>
@@ -164,14 +215,28 @@ export default function App() {
           ) : (
             <>
               <div className="chat-header">
-                <h2>{selected.name}</h2>
-                <span className="muted">Ask about timing, edge cases, disputes…</span>
+                <div className="chat-header-row">
+                  <div>
+                    <h2>{selected.name}</h2>
+                    <span className="muted">Ask about timing, edge cases, disputes…</span>
+                  </div>
+                  {messages.length > 0 && (
+                    <button
+                      type="button"
+                      className="new-conversation"
+                      onClick={() => clearConversation(selected.id)}
+                    >
+                      New conversation
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="messages">
                 {messages.length === 0 && (
                   <div className="hint">
                     Try: &ldquo;Can I play this card during another player&apos;s turn?&rdquo;
+                    Follow up with: &ldquo;What about on the first turn?&rdquo;
                   </div>
                 )}
                 {messages.map((msg, i) =>
@@ -190,7 +255,7 @@ export default function App() {
                   <button
                     type="button"
                     className="clarification-dismiss"
-                    onClick={() => setClarification(null)}
+                    onClick={() => setClarificationFor(selected.id, null)}
                   >
                     Ask something else instead
                   </button>
@@ -205,7 +270,9 @@ export default function App() {
                   placeholder={
                     clarification
                       ? "Your answer…"
-                      : "Ask a rules question…"
+                      : messages.length > 0
+                        ? "Ask a follow-up…"
+                        : "Ask a rules question…"
                   }
                   disabled={loading}
                 />

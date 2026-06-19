@@ -31,6 +31,11 @@ export type Citation = {
   issue?: string;
 };
 
+export type HistoryMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
 export type AskResponse = {
   rulebook_id: string;
   rulebook_name: string;
@@ -73,12 +78,13 @@ export async function uploadRulebook(file: File, name?: string): Promise<Ruleboo
 
 export async function askRulebook(
   rulebookId: string,
-  question: string
+  question: string,
+  history: HistoryMessage[] = [],
 ): Promise<AskResponse> {
   const res = await fetch(`${API}/api/rulebooks/${rulebookId}/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, history }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -89,5 +95,8 @@ export async function askRulebook(
 
 export async function deleteRulebook(rulebookId: string): Promise<void> {
   const res = await fetch(`${API}/api/rulebooks/${rulebookId}`, { method: "DELETE" });
-  if (!res.ok) throw new Error("Delete failed");
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(err.detail) ?? "Delete failed");
+  }
 }

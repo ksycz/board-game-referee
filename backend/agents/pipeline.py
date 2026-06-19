@@ -9,6 +9,7 @@ from agents.ingestion_agent import IngestionAgent
 from agents.referee_agent import RefereeAgent
 from agents.retrieval_agent import RetrievalAgent
 from config import TOP_K_CHUNKS
+from services.conversation import retrieval_query, trim_history
 from services.rulebook_store import RulebookStore
 from services.vector_store import VectorStore
 
@@ -46,16 +47,24 @@ class RefereePipeline:
             "ingestion": ingest_result,
         }
 
-    def ask(self, rulebook_id: str, question: str, top_k: int | None = None) -> dict:
+    def ask(
+        self,
+        rulebook_id: str,
+        question: str,
+        top_k: int | None = None,
+        history: list[dict] | None = None,
+    ) -> dict:
         book = self.store.get(rulebook_id)
         if not book:
             raise KeyError(f"Rulebook not found: {rulebook_id}")
 
+        prior = trim_history(history or [])
         k = top_k or TOP_K_CHUNKS
-        retrieval = self.retrieval.retrieve(rulebook_id, question, k)
+        search_query = retrieval_query(question, prior)
+        retrieval = self.retrieval.retrieve(rulebook_id, search_query, k)
         chunks = retrieval["chunks"]
 
-        ruling = self.referee.rule_on(question, chunks)
+        ruling = self.referee.rule_on(question, chunks, prior)
         validation = self.citation.validate(ruling, chunks)
 
         return {

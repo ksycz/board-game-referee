@@ -4,7 +4,7 @@ import re
 import uuid
 from dataclasses import asdict
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pathlib import Path
 
@@ -33,8 +33,14 @@ app.add_middleware(
 )
 
 
+class HistoryMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=2000)
+
+
 class AskRequest(BaseModel):
     question: str = Field(min_length=3, max_length=2000)
+    history: list[HistoryMessage] = Field(default_factory=list, max_length=20)
     top_k: Optional[int] = Field(default=None, ge=1, le=20)
 
 
@@ -89,7 +95,8 @@ def delete_rulebook(rulebook_id: str):
 @app.post("/api/rulebooks/{rulebook_id}/ask")
 def ask_rulebook(rulebook_id: str, body: AskRequest):
     try:
-        return pipeline.ask(rulebook_id, body.question, body.top_k)
+        history = [msg.model_dump() for msg in body.history]
+        return pipeline.ask(rulebook_id, body.question, body.top_k, history)
     except KeyError:
         raise HTTPException(status_code=404, detail="Rulebook not found")
     except ValueError as exc:
