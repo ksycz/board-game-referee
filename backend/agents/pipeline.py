@@ -9,7 +9,7 @@ from agents.ingestion_agent import IngestionAgent
 from agents.referee_agent import RefereeAgent
 from agents.retrieval_agent import RetrievalAgent
 from config import TOP_K_CHUNKS
-from services.conversation import retrieval_query, trim_history
+from services.conversation import dispute_retrieval_query, retrieval_query, trim_history
 from services.example_questions import example_questions_for_rulebook
 from services.game_name import derive_game_name, extract_game_name_from_pdf, looks_like_filename
 from services.rulebook_store import DuplicateRulebookError, RulebookStore, pdf_content_hash
@@ -94,9 +94,47 @@ class RefereePipeline:
         validation = self.citation.validate(ruling, chunks)
 
         return {
+            "mode": "ask",
             "rulebook_id": rulebook_id,
             "rulebook_name": book.name,
             "question": question,
+            "retrieval": {
+                "chunks_found": retrieval["chunks_found"],
+                "pages": sorted({c.page for c in chunks}),
+            },
+            "ruling": ruling,
+            "citation_check": validation,
+        }
+
+    def dispute(
+        self,
+        rulebook_id: str,
+        situation: str,
+        player_a: str,
+        player_b: str,
+        top_k: int | None = None,
+        history: list[dict] | None = None,
+    ) -> dict:
+        book = self.store.get(rulebook_id)
+        if not book:
+            raise KeyError(f"Rulebook not found: {rulebook_id}")
+
+        prior = trim_history(history or [])
+        k = top_k or TOP_K_CHUNKS
+        search_query = dispute_retrieval_query(situation, player_a, player_b)
+        retrieval = self.retrieval.retrieve(rulebook_id, search_query, k)
+        chunks = retrieval["chunks"]
+
+        ruling = self.referee.rule_dispute(situation, player_a, player_b, chunks, prior)
+        validation = self.citation.validate(ruling, chunks)
+
+        return {
+            "mode": "dispute",
+            "rulebook_id": rulebook_id,
+            "rulebook_name": book.name,
+            "situation": situation,
+            "player_a": player_a,
+            "player_b": player_b,
             "retrieval": {
                 "chunks_found": retrieval["chunks_found"],
                 "pages": sorted({c.page for c in chunks}),

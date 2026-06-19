@@ -1,6 +1,6 @@
 """Tests for conversation helpers."""
 
-from services.conversation import format_history_block, retrieval_query, trim_history
+from services.conversation import dispute_retrieval_query, format_history_block, retrieval_query, trim_history
 
 
 def test_retrieval_query_includes_recent_user_messages():
@@ -15,6 +15,17 @@ def test_retrieval_query_includes_recent_user_messages():
 
 def test_retrieval_query_without_history_returns_question():
     assert retrieval_query("Can I pass?", []) == "Can I pass?"
+
+
+def test_dispute_retrieval_query_combines_all_sides():
+    query = dispute_retrieval_query(
+        "Can I play after combat?",
+        "Yes, immediately after.",
+        "No, wait until next turn.",
+    )
+    assert "combat" in query
+    assert "immediately" in query
+    assert "next turn" in query
 
 
 def test_format_history_block_labels_roles():

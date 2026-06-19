@@ -135,6 +135,48 @@ def test_ask_accepts_optional_history(client, sample_pdf):
     assert "anthropic" in detail or "api_key" in detail
 
 
+def test_dispute_without_api_key_returns_error(client, sample_pdf):
+    with sample_pdf.open("rb") as f:
+        upload = client.post(
+            "/api/rulebooks",
+            files={"file": ("sample-rulebook.pdf", f, "application/pdf")},
+            data={"name": "Test Game"},
+        )
+    book_id = upload.json()["rulebook"]["id"]
+
+    res = client.post(
+        f"/api/rulebooks/{book_id}/dispute",
+        json={
+            "situation": "Can I attack on the first turn?",
+            "player_a": "Yes, combat is allowed.",
+            "player_b": "No, setup forbids it.",
+        },
+    )
+    assert res.status_code in (400, 500)
+    detail = res.json()["detail"].lower()
+    assert "anthropic" in detail or "api_key" in detail
+
+
+def test_dispute_rejects_short_arguments(client, sample_pdf):
+    with sample_pdf.open("rb") as f:
+        upload = client.post(
+            "/api/rulebooks",
+            files={"file": ("sample-rulebook.pdf", f, "application/pdf")},
+            data={"name": "Test Game"},
+        )
+    book_id = upload.json()["rulebook"]["id"]
+
+    res = client.post(
+        f"/api/rulebooks/{book_id}/dispute",
+        json={
+            "situation": "ok",
+            "player_a": "yes",
+            "player_b": "no",
+        },
+    )
+    assert res.status_code == 422
+
+
 def test_delete_rulebook(client, sample_pdf):
     with sample_pdf.open("rb") as f:
         upload = client.post(

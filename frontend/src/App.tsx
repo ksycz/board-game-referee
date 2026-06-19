@@ -5,6 +5,7 @@ import {
   Rulebook,
   askRulebook,
   deleteRulebook,
+  disputeRulebook,
   fetchExampleQuestions,
   isDuplicateRulebookError,
   listRulebooks,
@@ -12,8 +13,11 @@ import {
 } from "./api";
 import { IconBook, IconLibrary, IconScales, IconUpload } from "./Icons";
 
+type ChatMode = "ask" | "dispute";
+
 type Message =
   | { role: "user"; text: string }
+  | { role: "dispute"; situation: string; playerA: string; playerB: string }
   | { role: "referee"; data: AskResponse };
 
 type ClarificationContext = {
@@ -22,11 +26,18 @@ type ClarificationContext = {
 };
 
 function buildHistory(messages: Message[]): HistoryMessage[] {
-  return messages.map((msg) =>
-    msg.role === "user"
-      ? { role: "user", content: msg.text }
-      : { role: "assistant", content: msg.data.ruling.ruling },
-  );
+  return messages.map((msg) => {
+    if (msg.role === "user") {
+      return { role: "user", content: msg.text };
+    }
+    if (msg.role === "dispute") {
+      return {
+        role: "user",
+        content: `Dispute — Situation: ${msg.situation} | Player A: ${msg.playerA} | Player B: ${msg.playerB}`,
+      };
+    }
+    return { role: "assistant", content: msg.data.ruling.ruling };
+  });
 }
 
 const RULEBOOKS_PREVIEW_LIMIT = 5;
@@ -58,6 +69,10 @@ export default function App() {
   const [clarifications, setClarifications] = useState<Record<string, ClarificationContext | null>>({});
   const [examples, setExamples] = useState<Record<string, string[]>>({});
   const [question, setQuestion] = useState("");
+  const [chatMode, setChatMode] = useState<ChatMode>("ask");
+  const [disputeSituation, setDisputeSituation] = useState("");
+  const [disputePlayerA, setDisputePlayerA] = useState("");
+  const [disputePlayerB, setDisputePlayerB] = useState("");
   const [uploadName, setUploadName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -128,6 +143,9 @@ export default function App() {
     updateThread(rulebookId, () => []);
     setClarificationFor(rulebookId, null);
     setQuestion("");
+    setDisputeSituation("");
+    setDisputePlayerA("");
+    setDisputePlayerB("");
     setError(null);
   }
 
@@ -183,6 +201,45 @@ export default function App() {
       if (answer.ruling.needs_clarification && answer.ruling.clarification_question) {
         setClarificationFor(selectedId, {
           originalQuestion: clarification?.originalQuestion ?? reply,
+          question: answer.ruling.clarification_question,
+        });
+      } else {
+        setClarificationFor(selectedId, null);
+      }
+      updateThread(selectedId, (current) => [...current, { role: "referee", data: answer }]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDispute(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedId) return;
+
+    const situation = disputeSituation.trim();
+    const playerA = disputePlayerA.trim();
+    const playerB = disputePlayerB.trim();
+    if (!situation || !playerA || !playerB) return;
+
+    setDisputeSituation("");
+    setDisputePlayerA("");
+    setDisputePlayerB("");
+
+    const history = buildHistory(messages);
+    updateThread(selectedId, (current) => [
+      ...current,
+      { role: "dispute", situation, playerA, playerB },
+    ]);
+
+    setLoading(true);
+    setError(null);
+    try {
+      const answer = await disputeRulebook(selectedId, situation, playerA, playerB, history);
+      if (answer.ruling.needs_clarification && answer.ruling.clarification_question) {
+        setClarificationFor(selectedId, {
+          originalQuestion: situation,
           question: answer.ruling.clarification_question,
         });
       } else {
@@ -346,18 +403,42 @@ export default function App() {
                   <div>
                     <h2>{selected.name}</h2>
                     <span className="chat-subtitle">
-                      Ask about timing, edge cases, disputes…
+                      {chatMode === "ask"
+                        ? "Ask about timing, edge cases, disputes…"
+                        : "Two players disagree — let the referee decide"}
                     </span>
                   </div>
-                  {messages.length > 0 && (
-                    <button
-                      type="button"
-                      className="new-conversation"
-                      onClick={() => clearConversation(selected.id)}
-                    >
-                      New conversation
-                    </button>
-                  )}
+                  <div className="chat-header-actions">
+                    <div className="mode-toggle" role="tablist" aria-label="Chat mode">
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={chatMode === "ask"}
+                        className={chatMode === "ask" ? "active" : ""}
+                        onClick={() => setChatMode("ask")}
+                      >
+                        Ask
+                      </button>
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={chatMode === "dispute"}
+                        className={chatMode === "dispute" ? "active" : ""}
+                        onClick={() => setChatMode("dispute")}
+                      >
+                        Dispute
+                      </button>
+                    </div>
+                    {messages.length > 0 && (
+                      <button
+                        type="button"
+                        className="new-conversation"
+                        onClick={() => clearConversation(selected.id)}
+                      >
+                        New conversation
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -395,6 +476,24 @@ export default function App() {
                       <span className="message-label">You</span>
                       <div className="bubble user">{msg.text}</div>
                     </div>
+                  ) : msg.role === "dispute" ? (
+                    <div key={i} className="message-wrap dispute">
+                      <span className="message-label">Dispute</span>
+                      <div className="bubble dispute">
+                        <p className="dispute-field">
+                          <strong>Situation</strong>
+                          {msg.situation}
+                        </p>
+                        <p className="dispute-field">
+                          <strong>Player A</strong>
+                          {msg.playerA}
+                        </p>
+                        <p className="dispute-field">
+                          <strong>Player B</strong>
+                          {msg.playerB}
+                        </p>
+                      </div>
+                    </div>
                   ) : (
                     <div key={i} className="message-wrap referee">
                       <span className="message-label">Referee</span>
@@ -418,24 +517,80 @@ export default function App() {
                 </div>
               )}
 
-              <form className="ask-form" onSubmit={handleAsk}>
-                <input
-                  ref={inputRef}
-                  value={question}
-                  onChange={(e) => setQuestion(e.target.value)}
-                  placeholder={
-                    clarification
-                      ? "Your answer…"
-                      : messages.length > 0
-                        ? "Ask a follow-up…"
-                        : "Ask a rules question…"
-                  }
-                  disabled={loading}
-                />
-                <button type="submit" disabled={loading || !question.trim()}>
-                  {loading ? "Thinking…" : clarification ? "Send detail" : "Ask"}
-                </button>
-              </form>
+              {chatMode === "ask" ? (
+                <form className="ask-form" onSubmit={handleAsk}>
+                  <input
+                    ref={inputRef}
+                    value={question}
+                    onChange={(e) => setQuestion(e.target.value)}
+                    placeholder={
+                      clarification
+                        ? "Your answer…"
+                        : messages.length > 0
+                          ? "Ask a follow-up…"
+                          : "Ask a rules question…"
+                    }
+                    disabled={loading}
+                  />
+                  <button type="submit" disabled={loading || !question.trim()}>
+                    {loading ? "Thinking…" : clarification ? "Send detail" : "Ask"}
+                  </button>
+                </form>
+              ) : (
+                <form className="dispute-form" onSubmit={handleDispute}>
+                  <label className="field-label" htmlFor="dispute-situation">
+                    What&apos;s in dispute?
+                  </label>
+                  <textarea
+                    id="dispute-situation"
+                    value={disputeSituation}
+                    onChange={(e) => setDisputeSituation(e.target.value)}
+                    placeholder="e.g. Can I play this card after combat ends?"
+                    rows={2}
+                    disabled={loading}
+                  />
+                  <div className="dispute-players">
+                    <div>
+                      <label className="field-label" htmlFor="dispute-player-a">
+                        Player A says
+                      </label>
+                      <textarea
+                        id="dispute-player-a"
+                        value={disputePlayerA}
+                        onChange={(e) => setDisputePlayerA(e.target.value)}
+                        placeholder="Their interpretation…"
+                        rows={2}
+                        disabled={loading}
+                      />
+                    </div>
+                    <div>
+                      <label className="field-label" htmlFor="dispute-player-b">
+                        Player B says
+                      </label>
+                      <textarea
+                        id="dispute-player-b"
+                        value={disputePlayerB}
+                        onChange={(e) => setDisputePlayerB(e.target.value)}
+                        placeholder="Their interpretation…"
+                        rows={2}
+                        disabled={loading}
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="submit"
+                    className="dispute-submit"
+                    disabled={
+                      loading
+                      || !disputeSituation.trim()
+                      || !disputePlayerA.trim()
+                      || !disputePlayerB.trim()
+                    }
+                  >
+                    {loading ? "Weighing arguments…" : "Settle dispute"}
+                  </button>
+                </form>
+              )}
             </>
           )}
         </main>
@@ -447,12 +602,13 @@ export default function App() {
 function RefereeAnswer({ data }: { data: AskResponse }) {
   const { ruling, citation_check } = data;
   const needsInput = ruling.needs_clarification && ruling.clarification_question;
+  const isDispute = data.mode === "dispute";
 
   return (
     <div className={`bubble referee${needsInput ? " needs-clarification" : ""}`}>
       <div className="referee-stamp" aria-hidden="true">
         <IconScales className="icon icon-xs" />
-        Official ruling
+        {isDispute ? "Dispute ruling" : "Official ruling"}
       </div>
       {needsInput ? (
         <div className="clarification-callout">
@@ -462,6 +618,11 @@ function RefereeAnswer({ data }: { data: AskResponse }) {
         </div>
       ) : (
         <div className="ruling-header">
+          {isDispute && ruling.favors && (
+            <span className={`badge favors favors-${ruling.favors}`}>
+              {favorsLabel(ruling.favors)}
+            </span>
+          )}
           <span className={`badge ${ruling.confidence}`}>{ruling.confidence} confidence</span>
           {!citation_check.all_valid && (
             <span className="badge warn">citations need review</span>
@@ -471,6 +632,23 @@ function RefereeAnswer({ data }: { data: AskResponse }) {
 
       <p className={`ruling${needsInput ? " tentative" : ""}`}>{ruling.ruling}</p>
       <p className="reasoning">{ruling.reasoning}</p>
+
+      {isDispute && (ruling.player_a_assessment || ruling.player_b_assessment) && (
+        <div className="dispute-assessments">
+          {ruling.player_a_assessment && (
+            <div className="assessment">
+              <h4>Player A</h4>
+              <p>{ruling.player_a_assessment}</p>
+            </div>
+          )}
+          {ruling.player_b_assessment && (
+            <div className="assessment">
+              <h4>Player B</h4>
+              <p>{ruling.player_b_assessment}</p>
+            </div>
+          )}
+        </div>
+      )}
 
       {ruling.citations.length > 0 && (
         <div className="citations">
@@ -493,4 +671,21 @@ function RefereeAnswer({ data }: { data: AskResponse }) {
       </details>
     </div>
   );
+}
+
+function favorsLabel(favors: NonNullable<AskResponse["ruling"]["favors"]>): string {
+  switch (favors) {
+    case "player_a":
+      return "Favors Player A";
+    case "player_b":
+      return "Favors Player B";
+    case "split":
+      return "Split — both partly right";
+    case "neither":
+      return "Neither player";
+    case "unclear":
+      return "Unclear from rules";
+    default:
+      return favors;
+  }
 }

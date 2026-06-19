@@ -39,10 +39,16 @@ export type HistoryMessage = {
   content: string;
 };
 
+export type RulingFavors = "player_a" | "player_b" | "split" | "neither" | "unclear";
+
 export type AskResponse = {
+  mode: "ask" | "dispute";
   rulebook_id: string;
   rulebook_name: string;
-  question: string;
+  question?: string;
+  situation?: string;
+  player_a?: string;
+  player_b?: string;
   retrieval: { chunks_found: number; pages: number[] };
   ruling: {
     ruling: string;
@@ -51,6 +57,9 @@ export type AskResponse = {
     citations: Citation[];
     needs_clarification: boolean;
     clarification_question: string | null;
+    favors?: RulingFavors;
+    player_a_assessment?: string;
+    player_b_assessment?: string;
   };
   citation_check: {
     all_valid: boolean;
@@ -139,6 +148,30 @@ export async function askRulebook(
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(parseErrorDetail(err.detail) ?? "Question failed");
+  }
+  return res.json();
+}
+
+export async function disputeRulebook(
+  rulebookId: string,
+  situation: string,
+  playerA: string,
+  playerB: string,
+  history: HistoryMessage[] = [],
+): Promise<AskResponse> {
+  const res = await fetch(`${API}/api/rulebooks/${rulebookId}/dispute`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      situation,
+      player_a: playerA,
+      player_b: playerB,
+      history,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(err.detail) ?? "Dispute failed");
   }
   return res.json();
 }

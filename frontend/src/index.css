@@ -396,6 +396,43 @@ body::before {
   gap: 0.75rem;
 }
 
+.chat-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.mode-toggle {
+  display: inline-flex;
+  padding: 0.2rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+}
+
+.mode-toggle button {
+  padding: 0.35rem 0.75rem;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.mode-toggle button.active {
+  background: var(--accent);
+  color: white;
+}
+
+.mode-toggle button:hover:not(.active) {
+  color: var(--ink);
+}
+
 .chat-header h2 {
   margin: 0;
   font-family: var(--font-display);
@@ -506,6 +543,11 @@ body::before {
   align-items: flex-start;
 }
 
+.message-wrap.dispute {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
 .message-label {
   font-size: 0.68rem;
   font-weight: 700;
@@ -524,6 +566,33 @@ body::before {
   background: linear-gradient(145deg, var(--accent), var(--accent-strong));
   color: white;
   border-bottom-right-radius: 4px;
+}
+
+.bubble.dispute {
+  background: var(--surface-raised);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-bottom-right-radius: 4px;
+  color: var(--ink);
+}
+
+.dispute-field {
+  margin: 0 0 0.65rem;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.dispute-field:last-child {
+  margin-bottom: 0;
+}
+
+.dispute-field strong {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  margin-bottom: 0.2rem;
 }
 
 .bubble.referee {
@@ -598,6 +667,57 @@ body::before {
 .badge.clarify {
   background: var(--info-soft);
   color: #0369a1;
+}
+
+.badge.favors {
+  background: var(--accent-soft);
+  color: #4338ca;
+}
+
+.badge.favors-player_a,
+.badge.favors-player_b {
+  background: color-mix(in srgb, var(--accent) 18%, white);
+  color: #3730a3;
+}
+
+.badge.favors-split {
+  background: var(--warning-soft);
+  color: #b45309;
+}
+
+.badge.favors-neither,
+.badge.favors-unclear {
+  background: var(--surface-sunken);
+  color: var(--ink-muted);
+}
+
+.dispute-assessments {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0 0 0.85rem;
+}
+
+.assessment {
+  padding: 0.7rem 0.8rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+}
+
+.assessment h4 {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+
+.assessment p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--ink-muted);
+  line-height: 1.45;
 }
 
 .bubble.referee.needs-clarification {
@@ -746,6 +866,73 @@ body::before {
   opacity: 0.55;
   cursor: not-allowed;
   transform: none;
+}
+
+.dispute-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin: 0 1.15rem 1.15rem;
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  box-shadow: var(--shadow-sm);
+}
+
+.dispute-form textarea {
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  font: inherit;
+  resize: vertical;
+  min-height: 3.5rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dispute-form textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.dispute-players {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+}
+
+.dispute-submit {
+  align-self: flex-end;
+  padding: 0.7rem 1.1rem;
+  background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgb(79 70 229 / 0.25);
+  transition: filter 0.12s ease, transform 0.12s ease;
+}
+
+.dispute-submit:hover:not(:disabled) {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+.dispute-submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+@media (max-width: 720px) {
+  .dispute-players {
+    grid-template-columns: 1fr;
+  }
 }
 
 .empty-state {

@@ -45,6 +45,14 @@ class AskRequest(BaseModel):
     top_k: Optional[int] = Field(default=None, ge=1, le=20)
 
 
+class DisputeRequest(BaseModel):
+    situation: str = Field(min_length=3, max_length=2000)
+    player_a: str = Field(min_length=3, max_length=2000)
+    player_b: str = Field(min_length=3, max_length=2000)
+    history: list[HistoryMessage] = Field(default_factory=list, max_length=20)
+    top_k: Optional[int] = Field(default=None, ge=1, le=20)
+
+
 def _safe_filename(name: str) -> str:
     base = re.sub(r"[^\w.\-]+", "_", name).strip("._")
     return base or "rulebook.pdf"
@@ -123,6 +131,26 @@ def ask_rulebook(rulebook_id: str, body: AskRequest):
     try:
         history = [msg.model_dump() for msg in body.history]
         return pipeline.ask(rulebook_id, body.question, body.top_k, history)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Rulebook not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/rulebooks/{rulebook_id}/dispute")
+def dispute_rulebook(rulebook_id: str, body: DisputeRequest):
+    try:
+        history = [msg.model_dump() for msg in body.history]
+        return pipeline.dispute(
+            rulebook_id,
+            body.situation,
+            body.player_a,
+            body.player_b,
+            body.top_k,
+            history,
+        )
     except KeyError:
         raise HTTPException(status_code=404, detail="Rulebook not found")
     except ValueError as exc:

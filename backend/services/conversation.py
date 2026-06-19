@@ -19,6 +19,11 @@ def retrieval_query(question: str, history: list[dict]) -> str:
     return " ".join(parts)
 
 
+def dispute_retrieval_query(situation: str, player_a: str, player_b: str) -> str:
+    """Build a search query from a two-sided rules dispute."""
+    return " ".join(part.strip() for part in (situation, player_a, player_b) if part.strip())
+
+
 def format_history_block(history: list[dict]) -> str:
     if not history:
         return ""
