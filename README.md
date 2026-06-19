@@ -89,6 +89,7 @@ See **[USAGE.md](USAGE.md)** for how to upload rulebooks, ask questions, read ci
 | `GET` | `/api/rulebooks` | List uploaded rulebooks |
 | `POST` | `/api/rulebooks` | Upload PDF (`file`, optional `name`) |
 | `DELETE` | `/api/rulebooks/{id}` | Remove a rulebook |
+| `GET` | `/api/rulebooks/{id}/examples` | Suggested starter questions for a rulebook |
 | `POST` | `/api/rulebooks/{id}/ask` | Ask a question (`{"question": "...", "history": [{"role": "user", "content": "..."}, ...]}`) |
 
 ## Testing

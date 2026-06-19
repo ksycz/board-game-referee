@@ -10,6 +10,8 @@ from agents.referee_agent import RefereeAgent
 from agents.retrieval_agent import RetrievalAgent
 from config import TOP_K_CHUNKS
 from services.conversation import retrieval_query, trim_history
+from services.example_questions import example_questions_for_rulebook
+from services.game_name import derive_game_name, extract_game_name_from_pdf, looks_like_filename
 from services.rulebook_store import RulebookStore
 from services.vector_store import VectorStore
 
@@ -33,11 +35,19 @@ class RefereePipeline:
             self._referee = RefereeAgent()
         return self._referee
 
-    def upload_rulebook(self, name: str, filename: str, pdf_bytes: bytes) -> dict:
-        book = self.store.add(name=name, filename=filename, page_count=0)
+    def upload_rulebook(
+        self,
+        name: str | None,
+        filename: str,
+        pdf_bytes: bytes,
+        *,
+        original_filename: str,
+    ) -> dict:
+        book = self.store.add(name=name or "Rulebook", filename=filename, page_count=0)
         pdf_path = self.store.pdf_path(book.id)
         pdf_path.write_bytes(pdf_bytes)
 
+        book.name = derive_game_name(pdf_path, original_filename, name)
         ingest_result = self.ingestion.ingest(book.id, pdf_path)
         book.page_count = ingest_result["pages_extracted"]
         self.store._save()
@@ -45,7 +55,13 @@ class RefereePipeline:
         return {
             "rulebook": book,
             "ingestion": ingest_result,
+            "example_questions": self.example_questions(book.id),
         }
+
+    def example_questions(self, rulebook_id: str) -> list[str]:
+        if not self.store.get(rulebook_id):
+            raise KeyError(f"Rulebook not found: {rulebook_id}")
+        return example_questions_for_rulebook(self.vector_store, rulebook_id)
 
     def ask(
         self,

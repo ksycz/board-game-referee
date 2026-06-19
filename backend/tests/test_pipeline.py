@@ -32,7 +32,9 @@ class CapturingReferee:
 
 def test_pipeline_ask_passes_trimmed_history_to_referee(sample_pdf, isolated_data):
     pipeline = RefereePipeline()
-    upload = pipeline.upload_rulebook("Test Game", "test.pdf", sample_pdf.read_bytes())
+    upload = pipeline.upload_rulebook(
+        "Test Game", "test.pdf", sample_pdf.read_bytes(), original_filename="sample-rulebook.pdf"
+    )
     book_id = upload["rulebook"].id
 
     long_history = [{"role": "user", "content": f"question {i}"} for i in range(20)]
@@ -58,7 +60,9 @@ def test_pipeline_ask_passes_trimmed_history_to_referee(sample_pdf, isolated_dat
 
 def test_pipeline_ask_retrieves_with_follow_up_query(sample_pdf, isolated_data):
     pipeline = RefereePipeline()
-    upload = pipeline.upload_rulebook("Test Game", "test.pdf", sample_pdf.read_bytes())
+    upload = pipeline.upload_rulebook(
+        "Test Game", "test.pdf", sample_pdf.read_bytes(), original_filename="sample-rulebook.pdf"
+    )
     book_id = upload["rulebook"].id
 
     capturing = CapturingReferee()
@@ -78,7 +82,9 @@ def test_pipeline_ask_retrieves_with_follow_up_query(sample_pdf, isolated_data):
 
 def test_retrieval_query_improves_follow_up_hits(sample_pdf, isolated_data):
     pipeline = RefereePipeline()
-    upload = pipeline.upload_rulebook("Test Game", "test.pdf", sample_pdf.read_bytes())
+    upload = pipeline.upload_rulebook(
+        "Test Game", "test.pdf", sample_pdf.read_bytes(), original_filename="sample-rulebook.pdf"
+    )
     book_id = upload["rulebook"].id
 
     history = [

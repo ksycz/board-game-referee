@@ -33,6 +33,8 @@ def _is_heading(line: str) -> bool:
     words = cleaned.split()
     if not words or len(words) > 10:
         return False
+    if all(len(word) <= 2 for word in words):
+        return False
     if cleaned.isupper():
         return True
 

@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from config import RULEBOOKS_DIR, ensure_dirs
+from services.game_name import extract_game_name_from_pdf, looks_like_filename, prettify_filename_stem
 
 
 @dataclass
@@ -40,6 +41,21 @@ class RulebookStore:
         self._index_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     def list(self) -> list[Rulebook]:
+        changed = False
+        for book in self._rulebooks.values():
+            if not looks_like_filename(book.name):
+                continue
+            pdf_path = RULEBOOKS_DIR / book.filename
+            if not pdf_path.exists():
+                continue
+            resolved = extract_game_name_from_pdf(pdf_path)
+            if not resolved:
+                resolved = prettify_filename_stem(book.name)
+            if resolved and resolved != book.name:
+                book.name = resolved
+                changed = True
+        if changed:
+            self._save()
         return sorted(self._rulebooks.values(), key=lambda b: b.created_at, reverse=True)
 
     def get(self, rulebook_id: str) -> Rulebook | None:

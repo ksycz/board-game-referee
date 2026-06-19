@@ -71,18 +71,32 @@ async def upload_rulebook(
     if not content:
         raise HTTPException(status_code=400, detail="Empty file")
 
-    display_name = (name or file.filename).rsplit(".", 1)[0]
+    display_name = (name or "").strip() or None
     stored_name = f"{uuid.uuid4()}_{_safe_filename(file.filename)}"
 
     try:
-        result = pipeline.upload_rulebook(display_name, stored_name, content)
+        result = pipeline.upload_rulebook(
+            display_name,
+            stored_name,
+            content,
+            original_filename=file.filename,
+        )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     return {
         "rulebook": asdict(result["rulebook"]),
         "ingestion": result["ingestion"],
+        "example_questions": result["example_questions"],
     }
+
+
+@app.get("/api/rulebooks/{rulebook_id}/examples")
+def rulebook_examples(rulebook_id: str):
+    try:
+        return {"questions": pipeline.example_questions(rulebook_id)}
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Rulebook not found")
 
 
 @app.delete("/api/rulebooks/{rulebook_id}")

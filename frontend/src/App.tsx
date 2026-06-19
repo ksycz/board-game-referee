@@ -5,6 +5,7 @@ import {
   Rulebook,
   askRulebook,
   deleteRulebook,
+  fetchExampleQuestions,
   listRulebooks,
   uploadRulebook,
 } from "./api";
@@ -26,19 +27,49 @@ function buildHistory(messages: Message[]): HistoryMessage[] {
   );
 }
 
+const RULEBOOKS_PREVIEW_LIMIT = 5;
+
+function visibleRulebooks(
+  books: Rulebook[],
+  selectedId: string | null,
+  showAll: boolean,
+): Rulebook[] {
+  if (showAll || books.length <= RULEBOOKS_PREVIEW_LIMIT) {
+    return books;
+  }
+
+  const preview = books.slice(0, RULEBOOKS_PREVIEW_LIMIT);
+  if (selectedId && !preview.some((book) => book.id === selectedId)) {
+    const selected = books.find((book) => book.id === selectedId);
+    if (selected) {
+      return [...books.slice(0, RULEBOOKS_PREVIEW_LIMIT - 1), selected];
+    }
+  }
+
+  return preview;
+}
+
 export default function App() {
   const [rulebooks, setRulebooks] = useState<Rulebook[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [threads, setThreads] = useState<Record<string, Message[]>>({});
   const [clarifications, setClarifications] = useState<Record<string, ClarificationContext | null>>({});
+  const [examples, setExamples] = useState<Record<string, string[]>>({});
   const [question, setQuestion] = useState("");
   const [uploadName, setUploadName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showAllRulebooks, setShowAllRulebooks] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const displayedRulebooks = visibleRulebooks(rulebooks, selectedId, showAllRulebooks);
+  const hiddenRulebookCount = showAllRulebooks
+    ? 0
+    : Math.max(0, rulebooks.length - RULEBOOKS_PREVIEW_LIMIT);
 
   const messages = selectedId ? threads[selectedId] ?? [] : [];
   const clarification = selectedId ? clarifications[selectedId] ?? null : null;
+  const exampleQuestions = selectedId ? examples[selectedId] ?? [] : [];
 
   const updateThread = useCallback((rulebookId: string, updater: (prev: Message[]) => Message[]) => {
     setThreads((current) => ({
@@ -74,6 +105,20 @@ export default function App() {
     }
   }, [clarification]);
 
+  useEffect(() => {
+    if (!selectedId || examples[selectedId]) {
+      return;
+    }
+
+    fetchExampleQuestions(selectedId)
+      .then((questions) => {
+        setExamples((current) => ({ ...current, [selectedId]: questions }));
+      })
+      .catch(() => {
+        // Non-fatal: empty chat still works without suggestions.
+      });
+  }, [selectedId, examples]);
+
   const selected = rulebooks.find((b) => b.id === selectedId);
 
   function clearConversation(rulebookId: string) {
@@ -89,10 +134,14 @@ export default function App() {
     setLoading(true);
     setError(null);
     try {
-      const book = await uploadRulebook(file, uploadName || undefined);
+      const upload = await uploadRulebook(file, uploadName || undefined);
       setUploadName("");
-      setSelectedId(book.id);
-      clearConversation(book.id);
+      setSelectedId(upload.rulebook.id);
+      setExamples((current) => ({
+        ...current,
+        [upload.rulebook.id]: upload.example_questions,
+      }));
+      clearConversation(upload.rulebook.id);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -148,6 +197,11 @@ export default function App() {
         delete next[id];
         return next;
       });
+      setExamples((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
       setRulebooks((current) => {
         const next = current.filter((book) => book.id !== id);
         setSelectedId((selected) => (selected === id ? (next[0]?.id ?? null) : selected));
@@ -187,7 +241,7 @@ export default function App() {
             <h2>Your rulebooks</h2>
             {rulebooks.length === 0 && <p className="muted">No rulebooks yet.</p>}
             <ul className="book-list">
-              {rulebooks.map((book) => (
+              {displayedRulebooks.map((book) => (
                 <li key={book.id} className={book.id === selectedId ? "active" : ""}>
                   <button type="button" onClick={() => setSelectedId(book.id)}>
                     <strong>{book.name}</strong>
@@ -206,6 +260,24 @@ export default function App() {
                 </li>
               ))}
             </ul>
+            {hiddenRulebookCount > 0 && (
+              <button
+                type="button"
+                className="book-list-toggle"
+                onClick={() => setShowAllRulebooks(true)}
+              >
+                See {hiddenRulebookCount} more
+              </button>
+            )}
+            {showAllRulebooks && rulebooks.length > RULEBOOKS_PREVIEW_LIMIT && (
+              <button
+                type="button"
+                className="book-list-toggle"
+                onClick={() => setShowAllRulebooks(false)}
+              >
+                Show less
+              </button>
+            )}
           </section>
         </aside>
 
@@ -233,7 +305,28 @@ export default function App() {
               </div>
 
               <div className="messages">
-                {messages.length === 0 && (
+                {messages.length === 0 && exampleQuestions.length > 0 && (
+                  <div className="example-questions">
+                    <p className="example-questions-label">Try asking</p>
+                    <div className="example-questions-list">
+                      {exampleQuestions.map((example) => (
+                        <button
+                          key={example}
+                          type="button"
+                          className="example-question"
+                          disabled={loading}
+                          onClick={() => {
+                            setQuestion(example);
+                            inputRef.current?.focus();
+                          }}
+                        >
+                          {example}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {messages.length === 0 && exampleQuestions.length === 0 && (
                   <div className="hint">
                     Try: &ldquo;Can I play this card during another player&apos;s turn?&rdquo;
                     Follow up with: &ldquo;What about on the first turn?&rdquo;

@@ -56,13 +56,18 @@ export type AskResponse = {
   };
 };
 
+export type UploadResponse = {
+  rulebook: Rulebook;
+  example_questions: string[];
+};
+
 export async function listRulebooks(): Promise<Rulebook[]> {
   const res = await fetch(`${API}/api/rulebooks`);
   if (!res.ok) throw new Error("Failed to load rulebooks");
   return res.json();
 }
 
-export async function uploadRulebook(file: File, name?: string): Promise<Rulebook> {
+export async function uploadRulebook(file: File, name?: string): Promise<UploadResponse> {
   const form = new FormData();
   form.append("file", file);
   if (name) form.append("name", name);
@@ -73,7 +78,20 @@ export async function uploadRulebook(file: File, name?: string): Promise<Ruleboo
     throw new Error(parseErrorDetail(err.detail) ?? "Upload failed");
   }
   const data = await res.json();
-  return data.rulebook;
+  return {
+    rulebook: data.rulebook,
+    example_questions: data.example_questions ?? [],
+  };
+}
+
+export async function fetchExampleQuestions(rulebookId: string): Promise<string[]> {
+  const res = await fetch(`${API}/api/rulebooks/${rulebookId}/examples`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(err.detail) ?? "Failed to load example questions");
+  }
+  const data = await res.json();
+  return data.questions ?? [];
 }
 
 export async function askRulebook(

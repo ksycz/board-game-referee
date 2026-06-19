@@ -68,6 +68,18 @@ On your turn you may take one action. You may not attack on the first turn.
     assert "first turn" in chunks[1].text
 
 
+def test_single_letter_lines_are_not_section_headings():
+    page_text = """C
+
+Players take turns in clockwise order.
+"""
+    chunks = chunk_page_text(1, page_text, max_chars=600, min_chars=80)
+
+    assert len(chunks) == 1
+    assert chunks[0].section_hint is None
+    assert "clockwise order" in chunks[0].text
+
+
 def test_multi_page_pdf_reports_page_count(tmp_path):
     pdf = tmp_path / "multi.pdf"
     _make_pdf(

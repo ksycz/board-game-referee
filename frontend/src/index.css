@@ -120,6 +120,23 @@ header p {
   padding: 0 0.4rem;
 }
 
+.book-list-toggle {
+  margin-top: 0.35rem;
+  padding: 0.35rem 0.5rem;
+  border: none;
+  background: transparent;
+  color: #2f5d3a;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.book-list-toggle:hover {
+  color: #1f3f28;
+}
+
 .chat {
   display: flex;
   flex-direction: column;
@@ -160,6 +177,48 @@ header p {
   flex-direction: column;
   gap: 0.75rem;
   padding-bottom: 1rem;
+}
+
+.example-questions {
+  padding: 0.75rem;
+  border: 1px solid #e2d8c8;
+  border-radius: 12px;
+  background: #faf6ef;
+}
+
+.example-questions-label {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6b5d4f;
+  font-weight: 600;
+}
+
+.example-questions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.example-question {
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #d9cfc0;
+  border-radius: 10px;
+  background: white;
+  color: #2f5d3a;
+  font: inherit;
+  cursor: pointer;
+}
+
+.example-question:hover:not(:disabled) {
+  background: #e8f0e9;
+}
+
+.example-question:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .bubble {

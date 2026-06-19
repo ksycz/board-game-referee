@@ -41,6 +41,7 @@ def test_upload_and_list(client, sample_pdf):
     body = res.json()
     assert body["rulebook"]["name"] == "Test Game"
     assert body["ingestion"]["pages_extracted"] == 4
+    assert len(body["example_questions"]) == 3
 
     listed = client.get("/api/rulebooks").json()
     assert len(listed) == 1
@@ -129,3 +130,24 @@ def test_ask_rejects_invalid_history_role(client, sample_pdf):
         },
     )
     assert res.status_code == 422
+
+
+def test_rulebook_examples(client, sample_pdf):
+    with sample_pdf.open("rb") as f:
+        upload = client.post(
+            "/api/rulebooks",
+            files={"file": ("sample-rulebook.pdf", f, "application/pdf")},
+            data={"name": "Test Game"},
+        )
+    book_id = upload.json()["rulebook"]["id"]
+
+    res = client.get(f"/api/rulebooks/{book_id}/examples")
+    assert res.status_code == 200
+    questions = res.json()["questions"]
+    assert len(questions) == 3
+    assert all(isinstance(question, str) for question in questions)
+
+
+def test_rulebook_examples_unknown_book_returns_404(client):
+    res = client.get("/api/rulebooks/missing-id/examples")
+    assert res.status_code == 404

@@ -25,7 +25,7 @@ You can upload multiple rulebooks and switch between them. Click **×** next to 
 ## Ask a rules question
 
 1. Select a rulebook from the list.
-2. Type your question in the box at the bottom of the chat, e.g.:
+2. Pick a **Try asking** suggestion, or type your own question in the box at the bottom of the chat, e.g.:
    - *Can I play this card during another player's turn?*
    - *What happens on a tie in combat?*
    - *Do I draw a card at the end of my turn?*
