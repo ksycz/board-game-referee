@@ -2,6 +2,9 @@ const API = import.meta.env.VITE_API_URL ?? "";
 
 function parseErrorDetail(detail: unknown): string | undefined {
   if (typeof detail === "string") return detail;
+  if (typeof detail === "object" && detail && "message" in detail) {
+    return String((detail as { message: string }).message);
+  }
   if (Array.isArray(detail)) {
     return detail
       .map((item) => {
@@ -59,7 +62,30 @@ export type AskResponse = {
 export type UploadResponse = {
   rulebook: Rulebook;
   example_questions: string[];
+  already_exists?: boolean;
 };
+
+export class DuplicateRulebookError extends Error {
+  readonly rulebook: Rulebook;
+  readonly example_questions: string[];
+
+  constructor(message: string, rulebook: Rulebook, example_questions: string[]) {
+    super(message);
+    this.name = "DuplicateRulebookError";
+    this.rulebook = rulebook;
+    this.example_questions = example_questions;
+  }
+}
+
+export function isDuplicateRulebookError(err: unknown): err is DuplicateRulebookError {
+  return (
+    err instanceof DuplicateRulebookError
+    || (typeof err === "object"
+      && err !== null
+      && (err as { name?: string }).name === "DuplicateRulebookError"
+      && "rulebook" in err)
+  );
+}
 
 export async function listRulebooks(): Promise<Rulebook[]> {
   const res = await fetch(`${API}/api/rulebooks`);
@@ -73,11 +99,17 @@ export async function uploadRulebook(file: File, name?: string): Promise<UploadR
   if (name) form.append("name", name);
 
   const res = await fetch(`${API}/api/rulebooks`, { method: "POST", body: form });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(parseErrorDetail(err.detail) ?? "Upload failed");
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 409 && data.detail?.rulebook) {
+    throw new DuplicateRulebookError(
+      parseErrorDetail(data.detail) ?? "This rulebook is already in your library.",
+      data.detail.rulebook,
+      data.detail.example_questions ?? [],
+    );
   }
-  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(parseErrorDetail(data.detail) ?? "Upload failed");
+  }
   return {
     rulebook: data.rulebook,
     example_questions: data.example_questions ?? [],

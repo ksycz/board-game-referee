@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import uuid
 from dataclasses import asdict, dataclass
@@ -12,6 +13,16 @@ from config import RULEBOOKS_DIR, ensure_dirs
 from services.game_name import extract_game_name_from_pdf, looks_like_filename, prettify_filename_stem
 
 
+def pdf_content_hash(pdf_bytes: bytes) -> str:
+    return hashlib.sha256(pdf_bytes).hexdigest()
+
+
+class DuplicateRulebookError(Exception):
+    def __init__(self, existing: "Rulebook") -> None:
+        self.existing = existing
+        super().__init__(f'Rulebook "{existing.name}" is already in your library.')
+
+
 @dataclass
 class Rulebook:
     id: str
@@ -19,6 +30,7 @@ class Rulebook:
     filename: str
     page_count: int
     created_at: str
+    content_hash: str = ""
 
 
 class RulebookStore:
@@ -33,6 +45,7 @@ class RulebookStore:
             return
         raw = json.loads(self._index_path.read_text(encoding="utf-8"))
         for item in raw:
+            item.setdefault("content_hash", "")
             book = Rulebook(**item)
             self._rulebooks[book.id] = book
 
@@ -40,8 +53,29 @@ class RulebookStore:
         payload = [asdict(book) for book in self._rulebooks.values()]
         self._index_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
+    def _backfill_content_hashes(self) -> None:
+        changed = False
+        for book in self._rulebooks.values():
+            if book.content_hash:
+                continue
+            pdf_path = RULEBOOKS_DIR / book.filename
+            if not pdf_path.exists():
+                continue
+            book.content_hash = pdf_content_hash(pdf_path.read_bytes())
+            changed = True
+        if changed:
+            self._save()
+
+    def find_by_content_hash(self, content_hash: str) -> Rulebook | None:
+        self._backfill_content_hashes()
+        for book in self._rulebooks.values():
+            if book.content_hash == content_hash:
+                return book
+        return None
+
     def list(self) -> list[Rulebook]:
         changed = False
+        self._backfill_content_hashes()
         for book in self._rulebooks.values():
             if not looks_like_filename(book.name):
                 continue
@@ -61,13 +95,21 @@ class RulebookStore:
     def get(self, rulebook_id: str) -> Rulebook | None:
         return self._rulebooks.get(rulebook_id)
 
-    def add(self, name: str, filename: str, page_count: int) -> Rulebook:
+    def add(
+        self,
+        name: str,
+        filename: str,
+        page_count: int,
+        *,
+        content_hash: str,
+    ) -> Rulebook:
         book = Rulebook(
             id=str(uuid.uuid4()),
             name=name,
             filename=filename,
             page_count=page_count,
             created_at=datetime.now(timezone.utc).isoformat(),
+            content_hash=content_hash,
         )
         self._rulebooks[book.id] = book
         self._save()

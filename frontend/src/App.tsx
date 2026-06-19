@@ -6,6 +6,7 @@ import {
   askRulebook,
   deleteRulebook,
   fetchExampleQuestions,
+  isDuplicateRulebookError,
   listRulebooks,
   uploadRulebook,
 } from "./api";
@@ -60,6 +61,7 @@ export default function App() {
   const [uploadName, setUploadName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [showAllRulebooks, setShowAllRulebooks] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -134,6 +136,7 @@ export default function App() {
     if (!file) return;
     setLoading(true);
     setError(null);
+    setInfo(null);
     try {
       const upload = await uploadRulebook(file, uploadName || undefined);
       setUploadName("");
@@ -145,7 +148,18 @@ export default function App() {
       clearConversation(upload.rulebook.id);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      if (isDuplicateRulebookError(err)) {
+        setUploadName("");
+        setSelectedId(err.rulebook.id);
+        setExamples((current) => ({
+          ...current,
+          [err.rulebook.id]: err.example_questions,
+        }));
+        await refresh();
+        setInfo(`"${err.rulebook.name}" is already in your library — opened the existing copy.`);
+      } else {
+        setError(err instanceof Error ? err.message : String(err));
+      }
     } finally {
       setLoading(false);
       e.target.value = "";
@@ -226,6 +240,13 @@ export default function App() {
           <p>Your table-side rules lawyer — upload a rulebook, settle disputes with cited rulings.</p>
         </div>
       </header>
+
+      {(error || info) && (
+        <div className="app-notice" role="status">
+          {info && <div className="info">{info}</div>}
+          {error && <div className="error">{error}</div>}
+        </div>
+      )}
 
       <div className="layout">
         <aside className="sidebar panel">
@@ -417,7 +438,6 @@ export default function App() {
               </form>
             </>
           )}
-          {error && <div className="error">{error}</div>}
         </main>
       </div>
     </div>

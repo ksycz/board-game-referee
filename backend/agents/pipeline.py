@@ -12,7 +12,7 @@ from config import TOP_K_CHUNKS
 from services.conversation import retrieval_query, trim_history
 from services.example_questions import example_questions_for_rulebook
 from services.game_name import derive_game_name, extract_game_name_from_pdf, looks_like_filename
-from services.rulebook_store import RulebookStore
+from services.rulebook_store import DuplicateRulebookError, RulebookStore, pdf_content_hash
 from services.vector_store import VectorStore
 
 
@@ -43,7 +43,17 @@ class RefereePipeline:
         *,
         original_filename: str,
     ) -> dict:
-        book = self.store.add(name=name or "Rulebook", filename=filename, page_count=0)
+        content_hash = pdf_content_hash(pdf_bytes)
+        existing = self.store.find_by_content_hash(content_hash)
+        if existing:
+            raise DuplicateRulebookError(existing)
+
+        book = self.store.add(
+            name=name or "Rulebook",
+            filename=filename,
+            page_count=0,
+            content_hash=content_hash,
+        )
         pdf_path = self.store.pdf_path(book.id)
         pdf_path.write_bytes(pdf_bytes)
 
@@ -100,6 +110,21 @@ class RefereePipeline:
             return False
         self.vector_store.delete_rulebook(rulebook_id)
         return True
+
+    def dedupe_rulebooks(self) -> int:
+        """Remove extra copies of the same PDF, keeping the oldest upload per hash."""
+        self.store._backfill_content_hashes()
+        keep_hashes: set[str] = set()
+        removed = 0
+        for book in sorted(self.store._rulebooks.values(), key=lambda book: book.created_at):
+            if not book.content_hash:
+                continue
+            if book.content_hash in keep_hashes:
+                if self.delete_rulebook(book.id):
+                    removed += 1
+            else:
+                keep_hashes.add(book.content_hash)
+        return removed
 
     def reindex(self, rulebook_id: str) -> dict:
         pdf_path = self.store.pdf_path(rulebook_id)

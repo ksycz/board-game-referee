@@ -48,6 +48,51 @@ def test_upload_and_list(client, sample_pdf):
     assert listed[0]["page_count"] == 4
 
 
+def test_upload_duplicate_pdf_returns_409(client, sample_pdf):
+    with sample_pdf.open("rb") as f:
+        first = client.post(
+            "/api/rulebooks",
+            files={"file": ("sample-rulebook.pdf", f, "application/pdf")},
+            data={"name": "Test Game"},
+        )
+    assert first.status_code == 200
+    book_id = first.json()["rulebook"]["id"]
+
+    with sample_pdf.open("rb") as f:
+        second = client.post(
+            "/api/rulebooks",
+            files={"file": ("renamed-copy.pdf", f, "application/pdf")},
+            data={"name": "Another Name"},
+        )
+    assert second.status_code == 409
+    body = second.json()
+    assert body["detail"]["rulebook"]["id"] == book_id
+    assert len(body["detail"]["example_questions"]) == 3
+
+    listed = client.get("/api/rulebooks").json()
+    assert len(listed) == 1
+
+
+def test_list_dedupes_existing_duplicates(client, sample_pdf):
+    import main
+    from services.rulebook_store import pdf_content_hash
+
+    pdf_bytes = sample_pdf.read_bytes()
+    content_hash = pdf_content_hash(pdf_bytes)
+    store = main.pipeline.store
+    rulebooks_dir = store._index_path.parent
+
+    first = store.add("Game A", "a.pdf", 4, content_hash=content_hash)
+    second = store.add("Game B", "b.pdf", 4, content_hash=content_hash)
+    (rulebooks_dir / first.filename).write_bytes(pdf_bytes)
+    (rulebooks_dir / second.filename).write_bytes(pdf_bytes)
+
+    listed = client.get("/api/rulebooks").json()
+    assert len(listed) == 1
+    assert listed[0]["id"] == first.id
+    assert store.get(second.id) is None
+
+
 def test_ask_without_api_key_returns_error(client, sample_pdf):
     with sample_pdf.open("rb") as f:
         upload = client.post(

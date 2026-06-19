@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from agents.pipeline import RefereePipeline
 from config import CORS_ORIGINS, ensure_dirs
+from services.rulebook_store import DuplicateRulebookError
 
 ensure_dirs()
 
@@ -56,6 +57,7 @@ def health():
 
 @app.get("/api/rulebooks")
 def list_rulebooks():
+    pipeline.dedupe_rulebooks()
     return [asdict(book) for book in pipeline.store.list()]
 
 
@@ -81,6 +83,16 @@ async def upload_rulebook(
             content,
             original_filename=file.filename,
         )
+    except DuplicateRulebookError as exc:
+        existing = exc.existing
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": str(exc),
+                "rulebook": asdict(existing),
+                "example_questions": pipeline.example_questions(existing.id),
+            },
+        ) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
