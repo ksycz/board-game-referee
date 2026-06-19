@@ -9,6 +9,7 @@ import {
   deleteRulebook,
   disputeRulebook,
   fetchExampleQuestions,
+  formatUploadSuccessMessage,
   isDuplicateRulebookError,
   listRulebooks,
   uploadRulebook,
@@ -167,6 +168,7 @@ export default function App() {
       }));
       clearConversation(upload.rulebook.id);
       await refresh();
+      setInfo(formatUploadSuccessMessage(upload.rulebook.name, upload.ingestion));
     } catch (err) {
       if (isDuplicateRulebookError(err)) {
         setUploadName("");
@@ -176,7 +178,10 @@ export default function App() {
           [err.rulebook.id]: err.example_questions,
         }));
         await refresh();
-        setInfo(`"${err.rulebook.name}" is already in your library — opened the existing copy.`);
+        setInfo(
+          `"${err.rulebook.name}" is already in your library — opened the existing copy. `
+          + "Delete it first if you want to scan the PDF again.",
+        );
       } else {
         setError(err instanceof Error ? err.message : String(err));
       }

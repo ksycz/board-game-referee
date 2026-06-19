@@ -31,6 +31,7 @@ echo "Starting backend on http://localhost:8000"
 (
   cd "$ROOT/backend"
   source .venv/bin/activate
+  export PATH="/opt/homebrew/bin:/usr/local/bin:${PATH}"
   exec uvicorn main:app --reload --port 8000
 ) &
 BACKEND_PID=$!

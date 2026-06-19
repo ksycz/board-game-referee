@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
-from services.pdf_parser import TextChunk, extract_chunks
+from config import OCR_FALLBACK
+from services.pdf_parser import TextChunk, ensure_tesseract_path, extract_chunks
 from services.vector_store import VectorStore
 
 
@@ -23,4 +25,11 @@ class IngestionAgent:
         }
         if ocr_pages:
             result["ocr_pages"] = ocr_pages
+        elif OCR_FALLBACK and not shutil.which("tesseract"):
+            ensure_tesseract_path()
+            if not shutil.which("tesseract"):
+                result["ocr_warning"] = (
+                    "Scanning is turned on, but Tesseract is not installed. "
+                    "Run: brew install tesseract — then delete this game and upload again."
+                )
         return result

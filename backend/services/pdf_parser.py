@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,6 +22,25 @@ from config import (
 
 logger = logging.getLogger(__name__)
 _tesseract_missing_logged = False
+_TESSERACT_SEARCH_DIRS = (
+    "/opt/homebrew/bin",
+    "/usr/local/bin",
+)
+
+
+def ensure_tesseract_path() -> bool:
+    """Put a Homebrew or system Tesseract install on PATH if needed."""
+    if shutil.which("tesseract"):
+        return True
+
+    path_entries = os.environ.get("PATH", "").split(os.pathsep)
+    for directory in _TESSERACT_SEARCH_DIRS:
+        if directory in path_entries:
+            continue
+        if (Path(directory) / "tesseract").is_file():
+            os.environ["PATH"] = f"{directory}{os.pathsep}{os.environ.get('PATH', '')}"
+            break
+    return shutil.which("tesseract") is not None
 
 
 @dataclass(frozen=True)
@@ -96,9 +117,20 @@ def _indexable_char_count(text: str) -> int:
     return total
 
 
+def _chunk_has_substance(chunk: TextChunk) -> bool:
+    """True when a chunk looks like real rules text, not layout noise."""
+    words = re.findall(r"\w+", chunk.text)
+    has_sentence = any(mark in chunk.text for mark in ".?!")
+    if len(words) >= 8:
+        return True
+    return has_sentence and len(words) >= 5 and len(chunk.text) >= 30
+
+
 def _page_needs_ocr(text: str, chunks: list[TextChunk]) -> bool:
-    """True when normal extraction left no indexable chunks."""
-    if chunks:
+    """True when normal extraction left little usable rules text."""
+    if any(_chunk_has_substance(chunk) for chunk in chunks):
+        return False
+    if chunks and sum(len(chunk.text) for chunk in chunks) >= OCR_MIN_INDEXABLE_CHARS:
         return False
     return _indexable_char_count(text) < OCR_MIN_INDEXABLE_CHARS
 
@@ -106,6 +138,14 @@ def _page_needs_ocr(text: str, chunks: list[TextChunk]) -> bool:
 def _extract_page_text_ocr(page: fitz.Page) -> str | None:
     """OCR a page image when Tesseract is available; otherwise return None."""
     global _tesseract_missing_logged
+    if not ensure_tesseract_path():
+        if not _tesseract_missing_logged:
+            logger.warning(
+                "OCR_FALLBACK is enabled but Tesseract was not found on PATH "
+                "(install with Homebrew: brew install tesseract)",
+            )
+            _tesseract_missing_logged = True
+        return None
     try:
         textpage = page.get_textpage_ocr(
             language=OCR_LANGUAGE,
@@ -308,6 +348,8 @@ def extract_chunks(
     chunks: list[TextChunk] = []
     pages_with_text = 0
     ocr_pages = 0
+    if OCR_FALLBACK:
+        ensure_tesseract_path()
     try:
         for index in range(len(doc)):
             page = doc[index]

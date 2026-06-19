@@ -95,11 +95,36 @@ export type AskResponse = {
   };
 };
 
+export type IngestionResult = {
+  agent: string;
+  pages_extracted: number;
+  chunks_indexed: number;
+  ocr_pages?: number;
+  ocr_warning?: string;
+};
+
 export type UploadResponse = {
   rulebook: Rulebook;
   example_questions: string[];
+  ingestion?: IngestionResult;
   already_exists?: boolean;
 };
+
+export function formatUploadSuccessMessage(name: string, ingestion?: IngestionResult): string {
+  if (ingestion?.ocr_warning) {
+    return ingestion.ocr_warning;
+  }
+
+  const ocrPages = ingestion?.ocr_pages ?? 0;
+  if (ocrPages === 1) {
+    return `"${name}" is ready. One page was mostly graphics, so we scanned it to pull out the rules text.`;
+  }
+  if (ocrPages > 1) {
+    return `"${name}" is ready. We scanned ${ocrPages} pages that were mostly graphics to pull out the rules text.`;
+  }
+
+  return `"${name}" is ready — you can ask rules questions now.`;
+}
 
 export class DuplicateRulebookError extends Error {
   readonly rulebook: Rulebook;
@@ -149,6 +174,7 @@ export async function uploadRulebook(file: File, name?: string): Promise<UploadR
   return {
     rulebook: data.rulebook,
     example_questions: data.example_questions ?? [],
+    ingestion: data.ingestion,
   };
 }
 

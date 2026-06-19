@@ -1,10 +1,13 @@
 """Tests for PDF text chunking."""
 
+from pathlib import Path
+
 import fitz
 
 from services.pdf_parser import (
     _page_needs_ocr,
     chunk_page_text,
+    ensure_tesseract_path,
     extract_chunks,
 )
 
@@ -148,6 +151,22 @@ On your turn, choose one action from the list shown on your player board.
 
     assert len(chunks) == 1
     assert _page_needs_ocr(page_text, chunks) is False
+
+
+def test_page_needs_ocr_when_only_short_component_list():
+    page_text = """Components
+
+5 cards, 2 dice, 1 board
+"""
+    chunks = chunk_page_text(1, page_text, max_chars=600, min_chars=80)
+
+    assert len(chunks) == 1
+    assert _page_needs_ocr(page_text, chunks) is True
+
+
+def test_ensure_tesseract_path_finds_homebrew(monkeypatch):
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    assert ensure_tesseract_path() == (Path("/opt/homebrew/bin/tesseract").is_file())
 
 
 def test_ocr_fallback_upgrades_sparse_page(monkeypatch, tmp_path):
