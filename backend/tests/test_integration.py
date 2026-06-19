@@ -54,7 +54,7 @@ def test_ingest_and_retrieve_first_turn_attack_rule(sample_pdf: Path, tmp_path: 
     rulebook_id = "test-book"
     result = ingestion.ingest(rulebook_id, sample_pdf)
     assert result["pages_extracted"] == 4
-    assert result["chunks_indexed"] == 4
+    assert result["chunks_indexed"] >= 4
 
     hits = retrieval.retrieve(rulebook_id, "Can I attack on the first turn?", top_k=3)
     assert hits["chunks_found"] > 0

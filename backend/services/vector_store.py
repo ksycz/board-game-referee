@@ -11,7 +11,7 @@ from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
 from chromadb.config import Settings
 
 from config import CHROMA_DIR, ensure_dirs
-from services.pdf_parser import PageChunk
+from services.pdf_parser import TextChunk
 
 _DIM = 256
 
@@ -66,7 +66,7 @@ class VectorStore:
             embedding_function=SimpleEmbeddingFunction(),
         )
 
-    def index_rulebook(self, rulebook_id: str, pages: list[PageChunk]) -> int:
+    def index_rulebook(self, rulebook_id: str, chunks: list[TextChunk]) -> int:
         collection = self._collection(rulebook_id)
         if collection.count() > 0:
             self.delete_rulebook(rulebook_id)
@@ -75,14 +75,14 @@ class VectorStore:
         documents: list[str] = []
         metadatas: list[dict] = []
 
-        for page in pages:
+        for chunk in chunks:
             chunk_id = str(uuid.uuid4())
             ids.append(chunk_id)
-            documents.append(page.text)
+            documents.append(chunk.text)
             metadatas.append(
                 {
-                    "page": page.page,
-                    "section_hint": page.section_hint or "",
+                    "page": chunk.page,
+                    "section_hint": chunk.section_hint or "",
                 }
             )
 

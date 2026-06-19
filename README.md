@@ -4,6 +4,8 @@ A small web app that acts as a **rules referee** for board games. Upload a ruleb
 
 Built as a first agent project: four connected agents, retrieval over chunked PDFs, and a deployable FastAPI + React stack.
 
+**New here?** See [USAGE.md](USAGE.md) for a step-by-step guide to uploading rulebooks, asking questions, and reading rulings.
+
 ## How it works
 
 ```mermaid
@@ -24,7 +26,7 @@ flowchart LR
 | **Referee** | Reason over passages and produce a ruling + citations |
 | **Citation** | Verify cited pages/quotes match retrieved source text |
 
-This is intentionally a playground for **context engineering**: pages are chunked one-per-page, embedded with ChromaDB's default model, and only the top-k chunks go to the LLM. You can experiment with chunk size, top-k, and prompts without touching the rest of the app.
+This is intentionally a playground for **context engineering**: PDF pages are split by section headings and paragraphs into retrieval-sized chunks (with page numbers preserved), embedded with ChromaDB's default model, and only the top-k chunks go to the LLM. You can experiment with chunk size, top-k, and prompts without touching the rest of the app.
 
 ## Prerequisites
 
@@ -34,7 +36,23 @@ This is intentionally a playground for **context engineering**: pages are chunke
 
 ## Local setup
 
-### Backend
+### Run everything (one terminal)
+
+From the project root:
+
+```bash
+./scripts/dev.sh
+```
+
+Open http://localhost:5173 — the Vite dev server proxies `/api` to the backend on port 8000. Press Ctrl+C to stop both servers.
+
+If you get `Address already in use`, stop any old servers first:
+
+```bash
+lsof -ti :8000,:5173 | xargs kill
+```
+
+### Backend only
 
 ```bash
 cd backend
@@ -47,7 +65,7 @@ cp .env.example .env
 uvicorn main:app --reload --port 8000
 ```
 
-### Frontend
+### Frontend only
 
 ```bash
 cd frontend
@@ -56,6 +74,10 @@ npm run dev
 ```
 
 Open http://localhost:5173 — the Vite dev server proxies `/api` to the backend.
+
+## Using the app
+
+See **[USAGE.md](USAGE.md)** for how to upload rulebooks, ask questions, read citations, and use the clarification flow.
 
 ## API
 
@@ -123,7 +145,6 @@ board-game-referee/
 
 ## Ideas to try next
 
-- Split long pages into smaller chunks (by heading or paragraph)
 - Add a "dispute mode" that takes two players' arguments
 - Log questions + rulings and score citation accuracy over time
 - Swap ChromaDB for a hosted vector DB when you deploy

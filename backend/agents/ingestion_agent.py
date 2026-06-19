@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from services.pdf_parser import PageChunk, extract_pages
+from services.pdf_parser import TextChunk, extract_chunks
 from services.vector_store import VectorStore
 
 
@@ -13,10 +13,11 @@ class IngestionAgent:
         self.vector_store = vector_store or VectorStore()
 
     def ingest(self, rulebook_id: str, pdf_path: Path) -> dict:
-        pages: list[PageChunk] = extract_pages(pdf_path)
-        indexed = self.vector_store.index_rulebook(rulebook_id, pages)
+        chunks: list[TextChunk]
+        chunks, page_count = extract_chunks(pdf_path)
+        indexed = self.vector_store.index_rulebook(rulebook_id, chunks)
         return {
             "agent": "ingestion",
-            "pages_extracted": len(pages),
+            "pages_extracted": page_count,
             "chunks_indexed": indexed,
         }

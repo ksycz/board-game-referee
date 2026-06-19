@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AskResponse,
   Rulebook,
@@ -12,6 +12,11 @@ type Message =
   | { role: "user"; text: string }
   | { role: "referee"; data: AskResponse };
 
+type ClarificationContext = {
+  originalQuestion: string;
+  question: string;
+};
+
 export default function App() {
   const [rulebooks, setRulebooks] = useState<Rulebook[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -20,6 +25,8 @@ export default function App() {
   const [uploadName, setUploadName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [clarification, setClarification] = useState<ClarificationContext | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
     const books = await listRulebooks();
@@ -33,6 +40,12 @@ export default function App() {
     refresh().catch((e) => setError(String(e)));
   }, [refresh]);
 
+  useEffect(() => {
+    if (clarification) {
+      inputRef.current?.focus();
+    }
+  }, [clarification]);
+
   const selected = rulebooks.find((b) => b.id === selectedId);
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -45,6 +58,7 @@ export default function App() {
       setUploadName("");
       setSelectedId(book.id);
       setMessages([]);
+      setClarification(null);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -57,13 +71,27 @@ export default function App() {
   async function handleAsk(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedId || !question.trim()) return;
-    const q = question.trim();
+
+    const reply = question.trim();
     setQuestion("");
-    setMessages((m) => [...m, { role: "user", text: q }]);
+
+    const asked = clarification
+      ? `Original question: ${clarification.originalQuestion}\n\nClarification (${clarification.question}): ${reply}`
+      : reply;
+
+    setMessages((m) => [...m, { role: "user", text: reply }]);
     setLoading(true);
     setError(null);
     try {
-      const answer = await askRulebook(selectedId, q);
+      const answer = await askRulebook(selectedId, asked);
+      if (answer.ruling.needs_clarification && answer.ruling.clarification_question) {
+        setClarification({
+          originalQuestion: clarification?.originalQuestion ?? reply,
+          question: answer.ruling.clarification_question,
+        });
+      } else {
+        setClarification(null);
+      }
       setMessages((m) => [...m, { role: "referee", data: answer }]);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -80,6 +108,7 @@ export default function App() {
       if (selectedId === id) {
         setSelectedId(null);
         setMessages([]);
+        setClarification(null);
       }
       await refresh();
     } catch (err) {
@@ -118,7 +147,7 @@ export default function App() {
             <ul className="book-list">
               {rulebooks.map((book) => (
                 <li key={book.id} className={book.id === selectedId ? "active" : ""}>
-                  <button type="button" onClick={() => { setSelectedId(book.id); setMessages([]); }}>
+                  <button type="button" onClick={() => { setSelectedId(book.id); setMessages([]); setClarification(null); }}>
                     <strong>{book.name}</strong>
                     <span>{book.page_count} pages</span>
                   </button>
@@ -154,15 +183,34 @@ export default function App() {
                 )}
               </div>
 
+              {clarification && (
+                <div className="clarification-prompt" role="status">
+                  <p className="clarification-prompt-label">Referee needs one detail</p>
+                  <p className="clarification-prompt-question">{clarification.question}</p>
+                  <button
+                    type="button"
+                    className="clarification-dismiss"
+                    onClick={() => setClarification(null)}
+                  >
+                    Ask something else instead
+                  </button>
+                </div>
+              )}
+
               <form className="ask-form" onSubmit={handleAsk}>
                 <input
+                  ref={inputRef}
                   value={question}
                   onChange={(e) => setQuestion(e.target.value)}
-                  placeholder="Ask a rules question…"
+                  placeholder={
+                    clarification
+                      ? "Your answer…"
+                      : "Ask a rules question…"
+                  }
                   disabled={loading}
                 />
                 <button type="submit" disabled={loading || !question.trim()}>
-                  {loading ? "Thinking…" : "Ask"}
+                  {loading ? "Thinking…" : clarification ? "Send detail" : "Ask"}
                 </button>
               </form>
             </>
@@ -176,15 +224,26 @@ export default function App() {
 
 function RefereeAnswer({ data }: { data: AskResponse }) {
   const { ruling, citation_check } = data;
+  const needsInput = ruling.needs_clarification && ruling.clarification_question;
+
   return (
-    <div className="bubble referee">
-      <div className="ruling-header">
-        <span className={`badge ${ruling.confidence}`}>{ruling.confidence} confidence</span>
-        {!citation_check.all_valid && (
-          <span className="badge warn">citations need review</span>
-        )}
-      </div>
-      <p className="ruling">{ruling.ruling}</p>
+    <div className={`bubble referee${needsInput ? " needs-clarification" : ""}`}>
+      {needsInput ? (
+        <div className="clarification-callout">
+          <span className="badge clarify">Needs your input</span>
+          <p className="clarification-question">{ruling.clarification_question}</p>
+          <p className="clarification-hint">Reply below with the missing detail to get a final ruling.</p>
+        </div>
+      ) : (
+        <div className="ruling-header">
+          <span className={`badge ${ruling.confidence}`}>{ruling.confidence} confidence</span>
+          {!citation_check.all_valid && (
+            <span className="badge warn">citations need review</span>
+          )}
+        </div>
+      )}
+
+      <p className={`ruling${needsInput ? " tentative" : ""}`}>{ruling.ruling}</p>
       <p className="reasoning">{ruling.reasoning}</p>
 
       {ruling.citations.length > 0 && (
@@ -200,10 +259,6 @@ function RefereeAnswer({ data }: { data: AskResponse }) {
             </blockquote>
           ))}
         </div>
-      )}
-
-      {ruling.needs_clarification && ruling.clarification_question && (
-        <p className="clarify"><strong>Need clarification:</strong> {ruling.clarification_question}</p>
       )}
 
       <details>

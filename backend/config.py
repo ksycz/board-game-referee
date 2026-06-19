@@ -13,6 +13,8 @@ CHROMA_DIR = DATA_DIR / "chroma"
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 TOP_K_CHUNKS = int(os.getenv("TOP_K_CHUNKS", "6"))
+CHUNK_MAX_CHARS = int(os.getenv("CHUNK_MAX_CHARS", "600"))
+CHUNK_MIN_CHARS = int(os.getenv("CHUNK_MIN_CHARS", "100"))
 
 _cors = os.getenv("CORS_ORIGINS", "http://localhost:5173")
 CORS_ORIGINS = [origin.strip() for origin in _cors.split(",") if origin.strip()]

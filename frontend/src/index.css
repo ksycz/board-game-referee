@@ -188,6 +188,73 @@ header p {
 .badge.medium { background: #f5e6c8; color: #6b4e12; }
 .badge.low { background: #f0d4d4; color: #7a2b2b; }
 .badge.warn { background: #f5e6c8; color: #6b4e12; }
+.badge.clarify { background: #dce8f5; color: #1e4466; }
+
+.bubble.referee.needs-clarification {
+  border-color: #8eb8d8;
+  background: #f5f9fc;
+}
+
+.clarification-callout {
+  margin-bottom: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 10px;
+  background: #e8f2fa;
+  border: 1px solid #b9d4ea;
+}
+
+.clarification-question {
+  margin: 0.5rem 0 0.35rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #1e4466;
+}
+
+.clarification-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #4a667a;
+}
+
+.ruling.tentative {
+  font-size: 1rem;
+  font-weight: 500;
+  color: #4a433a;
+}
+
+.clarification-prompt {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 10px;
+  background: #e8f2fa;
+  border: 1px solid #b9d4ea;
+}
+
+.clarification-prompt-label {
+  margin: 0;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #1e4466;
+  font-weight: 600;
+}
+
+.clarification-prompt-question {
+  margin: 0.35rem 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.clarification-dismiss {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #4a667a;
+  font-size: 0.85rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
 
 .citations blockquote {
   margin: 0.5rem 0;
