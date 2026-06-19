@@ -8,6 +8,8 @@ Copyright © 2026 Katarzyna Vaňous. Released under the [MIT License](LICENSE).
 
 **New here?** See [USAGE.md](USAGE.md) for a step-by-step guide to uploading rulebooks, asking questions, dispute mode, and reading rulings.
 
+**Learning context engineering?** See [docs/CONTEXT_ENGINEERING.md](docs/CONTEXT_ENGINEERING.md) — a reading order, exercises, and file map for this codebase.
+
 ## Features
 
 - **Ask mode** — plain-English rules questions with cited rulings
