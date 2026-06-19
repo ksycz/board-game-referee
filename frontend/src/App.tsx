@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AskResponse,
+  Citation,
   HistoryMessage,
   Rulebook,
+  SourceExcerpt,
   askRulebook,
   deleteRulebook,
   disputeRulebook,
@@ -652,18 +654,7 @@ function RefereeAnswer({ data }: { data: AskResponse }) {
       )}
 
       {ruling.citations.length > 0 && (
-        <div className="citations">
-          <h4>Citations</h4>
-          {ruling.citations.map((c, i) => (
-            <blockquote key={i} className={citation_check.citations[i]?.valid === false ? "invalid" : ""}>
-              <footer>
-                Page {c.page}
-                {c.section ? ` · ${c.section}` : ""}
-              </footer>
-              &ldquo;{c.quote}&rdquo;
-            </blockquote>
-          ))}
-        </div>
+        <CitationsList data={data} />
       )}
 
       <details>
@@ -671,6 +662,117 @@ function RefereeAnswer({ data }: { data: AskResponse }) {
         <pre>{JSON.stringify(data, null, 2)}</pre>
       </details>
     </div>
+  );
+}
+
+function CitationsList({ data }: { data: AskResponse }) {
+  const { ruling, citation_check } = data;
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+
+  const selected = selectedIndex !== null ? citation_check.citations[selectedIndex] : null;
+  const selectedRuling = selectedIndex !== null ? ruling.citations[selectedIndex] : null;
+
+  return (
+    <div className="citations">
+      <h4>Citations</h4>
+      <p className="citations-hint">Tap a citation to view the rulebook excerpt.</p>
+      <ul className="citation-list">
+        {ruling.citations.map((citation, index) => {
+          const checked = citation_check.citations[index];
+          const invalid = checked?.valid === false;
+          const isSelected = selectedIndex === index;
+          return (
+            <li key={index}>
+              <button
+                type="button"
+                className={`citation-link${invalid ? " invalid" : ""}${isSelected ? " selected" : ""}`}
+                aria-expanded={isSelected}
+                onClick={() => setSelectedIndex(isSelected ? null : index)}
+              >
+                <span className="citation-link-label">
+                  Page {citation.page}
+                  {citation.section ? ` · ${citation.section}` : ""}
+                </span>
+                <span className="citation-link-quote">&ldquo;{citation.quote}&rdquo;</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {selected && selectedRuling && (
+        <SourcePanel
+          citation={selected}
+          quote={selectedRuling.quote}
+          sources={data.retrieval.sources ?? []}
+          onClose={() => setSelectedIndex(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function SourcePanel({
+  citation,
+  quote,
+  sources,
+  onClose,
+}: {
+  citation: Citation;
+  quote: string;
+  sources: SourceExcerpt[];
+  onClose: () => void;
+}) {
+  const excerpt =
+    citation.source_excerpt
+    ?? sources.find((source) => source.page === citation.page)?.text
+    ?? null;
+  const section = citation.source_section ?? citation.section ?? sources.find((s) => s.page === citation.page)?.section;
+
+  return (
+    <div className="source-panel" role="region" aria-label="Source excerpt">
+      <div className="source-panel-header">
+        <div>
+          <p className="source-panel-title">Rulebook source</p>
+          <p className="source-panel-meta">
+            Page {citation.page}
+            {section ? ` · ${section}` : ""}
+          </p>
+        </div>
+        <button type="button" className="source-panel-close" onClick={onClose}>
+          Close
+        </button>
+      </div>
+      {excerpt ? (
+        <div className="source-panel-body">{highlightQuoteInExcerpt(excerpt, quote)}</div>
+      ) : (
+        <p className="source-panel-missing">
+          This passage was not in the retrieved context for this question.
+          {citation.issue ? ` (${citation.issue.replace(/_/g, " ")})` : ""}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function highlightQuoteInExcerpt(excerpt: string, quote: string): ReactNode {
+  const trimmed = quote.trim();
+  if (!trimmed) {
+    return excerpt;
+  }
+
+  const lowerExcerpt = excerpt.toLowerCase();
+  const lowerQuote = trimmed.toLowerCase();
+  const index = lowerExcerpt.indexOf(lowerQuote);
+  if (index === -1) {
+    return excerpt;
+  }
+
+  return (
+    <>
+      {excerpt.slice(0, index)}
+      <mark>{excerpt.slice(index, index + trimmed.length)}</mark>
+      {excerpt.slice(index + trimmed.length)}
+    </>
   );
 }
 

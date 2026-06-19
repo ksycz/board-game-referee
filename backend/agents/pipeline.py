@@ -39,6 +39,21 @@ class RefereePipeline:
             self._referee = RefereeAgent()
         return self._referee
 
+    @staticmethod
+    def _retrieval_payload(chunks) -> dict:
+        return {
+            "chunks_found": len(chunks),
+            "pages": sorted({chunk.page for chunk in chunks}),
+            "sources": [
+                {
+                    "page": chunk.page,
+                    "section": chunk.section_hint,
+                    "text": chunk.text,
+                }
+                for chunk in chunks
+            ],
+        }
+
     def _finalize_response(
         self,
         response: dict,
@@ -135,10 +150,7 @@ class RefereePipeline:
                 "rulebook_id": rulebook_id,
                 "rulebook_name": book.name,
                 "question": question,
-                "retrieval": {
-                    "chunks_found": retrieval["chunks_found"],
-                    "pages": sorted({c.page for c in chunks}),
-                },
+                "retrieval": self._retrieval_payload(chunks),
                 "ruling": ruling,
                 "citation_check": validation,
             },
@@ -193,10 +205,7 @@ class RefereePipeline:
                 "situation": situation,
                 "player_a": player_a,
                 "player_b": player_b,
-                "retrieval": {
-                    "chunks_found": retrieval["chunks_found"],
-                    "pages": sorted({c.page for c in chunks}),
-                },
+                "retrieval": self._retrieval_payload(chunks),
                 "ruling": ruling,
                 "citation_check": validation,
             },

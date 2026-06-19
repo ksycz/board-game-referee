@@ -32,6 +32,14 @@ export type Citation = {
   quote: string;
   valid?: boolean;
   issue?: string;
+  source_excerpt?: string | null;
+  source_section?: string | null;
+};
+
+export type SourceExcerpt = {
+  page: number;
+  section?: string | null;
+  text: string;
 };
 
 export type HistoryMessage = {
@@ -63,7 +71,12 @@ export type AskResponse = {
   situation?: string;
   player_a?: string;
   player_b?: string;
-  retrieval: { chunks_found: number; pages: number[]; metrics?: RetrievalMetrics };
+  retrieval: {
+    chunks_found: number;
+    pages: number[];
+    sources?: SourceExcerpt[];
+    metrics?: RetrievalMetrics;
+  };
   ruling: {
     ruling: string;
     confidence: "high" | "medium" | "low";

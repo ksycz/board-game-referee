@@ -76,6 +76,8 @@ def test_pipeline_ask_includes_retrieval_metrics(sample_pdf, isolated_data):
     assert "retrieved_pages" in metrics
     assert "citation_pass_rate" in metrics
     assert metrics["citations_checked"] >= 0
+    assert result["retrieval"]["sources"]
+    assert len(result["retrieval"]["sources"]) > 0
 
 
 def test_pipeline_ask_retrieves_with_follow_up_query(sample_pdf, isolated_data):
