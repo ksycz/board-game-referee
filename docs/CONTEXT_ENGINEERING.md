@@ -187,6 +187,39 @@ pytest tests/test_citation_agent.py -v # validation rules
 
 ---
 
+## Graphical / layout-heavy PDFs
+
+Some rulebooks (tight columns, icons, player boards in the PDF) extract poorly as plain text. You may see headings like **Choose Actions** with body text that is only `"2"` (a page number) — retrieval sends junk to the LLM and you get honest but useless answers.
+
+### Option A — Text-based PDF (try this first)
+
+Best fix, no code changes:
+
+1. Check the publisher site or BoardGameGeek **Files** for a “rulebook”, “rules reference”, or “learn to play” PDF (often more text-heavy than the glossy manual).
+2. Open the PDF and try selecting a sentence with your cursor. If you **can’t select real paragraph text**, the app will struggle too.
+3. Delete the game in the app and **re-upload** the better PDF.
+
+### Option B — OCR (future / optional)
+
+When pages are scanned or text is baked into images, run **OCR** at ingest time:
+
+| Piece | Approach |
+|-------|----------|
+| Engine | [Tesseract](https://github.com/tesseract-ocr/tesseract) via PyMuPDF `page.get_textpage_ocr()` |
+| When | Per page, only if normal extraction yields almost no indexable text |
+| Cost | Slower uploads; needs `tesseract` installed on the server (`brew install tesseract` on macOS) |
+| Config | Planned: `OCR_FALLBACK=1` in `.env` (not enabled by default) |
+
+Tradeoffs: OCR adds dependencies and latency; accuracy on stylized fonts and tables is imperfect. Prefer a text PDF when you can.
+
+### Diagnose before tuning prompts
+
+1. Ask a question → expand **Agent trace** → `retrieval.sources`.
+2. If excerpts are headers, numbers, or component lists, **fix ingestion** (better PDF or OCR), not the referee prompt.
+3. After re-uploading, use **New conversation** so FAQ cache does not return an old answer.
+
+---
+
 ## Further reading in-repo
 
 - [USAGE.md](../USAGE.md) — using the app at the table
