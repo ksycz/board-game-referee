@@ -1,21 +1,21 @@
 """API smoke tests using FastAPI TestClient."""
 
 import importlib
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-
-SAMPLE_PDF = Path(__file__).parent / "fixtures" / "sample-rulebook.pdf"
 
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     data = tmp_path / "data"
+    rulebooks_dir = data / "rulebooks"
+    chroma_dir = data / "chroma"
     monkeypatch.setattr("config.DATA_DIR", data)
-    monkeypatch.setattr("config.RULEBOOKS_DIR", data / "rulebooks")
-    monkeypatch.setattr("config.CHROMA_DIR", data / "chroma")
-    monkeypatch.setattr("services.vector_store.CHROMA_DIR", data / "chroma")
+    monkeypatch.setattr("config.RULEBOOKS_DIR", rulebooks_dir)
+    monkeypatch.setattr("config.CHROMA_DIR", chroma_dir)
+    monkeypatch.setattr("services.vector_store.CHROMA_DIR", chroma_dir)
+    monkeypatch.setattr("services.rulebook_store.RULEBOOKS_DIR", rulebooks_dir)
     monkeypatch.setattr("config.ANTHROPIC_API_KEY", "")
 
     import main
@@ -30,9 +30,8 @@ def test_health(client):
     assert res.json() == {"status": "ok"}
 
 
-def test_upload_and_list(client):
-    assert SAMPLE_PDF.exists()
-    with SAMPLE_PDF.open("rb") as f:
+def test_upload_and_list(client, sample_pdf):
+    with sample_pdf.open("rb") as f:
         res = client.post(
             "/api/rulebooks",
             files={"file": ("sample-rulebook.pdf", f, "application/pdf")},
@@ -48,8 +47,8 @@ def test_upload_and_list(client):
     assert listed[0]["page_count"] == 4
 
 
-def test_ask_without_api_key_returns_error(client):
-    with SAMPLE_PDF.open("rb") as f:
+def test_ask_without_api_key_returns_error(client, sample_pdf):
+    with sample_pdf.open("rb") as f:
         upload = client.post(
             "/api/rulebooks",
             files={"file": ("sample-rulebook.pdf", f, "application/pdf")},
@@ -66,8 +65,8 @@ def test_ask_without_api_key_returns_error(client):
     assert "anthropic" in detail or "api_key" in detail
 
 
-def test_ask_accepts_optional_history(client):
-    with SAMPLE_PDF.open("rb") as f:
+def test_ask_accepts_optional_history(client, sample_pdf):
+    with sample_pdf.open("rb") as f:
         upload = client.post(
             "/api/rulebooks",
             files={"file": ("sample-rulebook.pdf", f, "application/pdf")},
@@ -88,3 +87,45 @@ def test_ask_accepts_optional_history(client):
     assert res.status_code in (400, 500)
     detail = res.json()["detail"].lower()
     assert "anthropic" in detail or "api_key" in detail
+
+
+def test_delete_rulebook(client, sample_pdf):
+    with sample_pdf.open("rb") as f:
+        upload = client.post(
+            "/api/rulebooks",
+            files={"file": ("sample-rulebook.pdf", f, "application/pdf")},
+            data={"name": "Test Game"},
+        )
+    book_id = upload.json()["rulebook"]["id"]
+
+    res = client.delete(f"/api/rulebooks/{book_id}")
+    assert res.status_code == 200
+    assert res.json() == {"deleted": book_id}
+
+    listed = client.get("/api/rulebooks").json()
+    assert listed == []
+
+
+def test_delete_unknown_rulebook_returns_404(client):
+    res = client.delete("/api/rulebooks/does-not-exist")
+    assert res.status_code == 404
+    assert res.json()["detail"] == "Rulebook not found"
+
+
+def test_ask_rejects_invalid_history_role(client, sample_pdf):
+    with sample_pdf.open("rb") as f:
+        upload = client.post(
+            "/api/rulebooks",
+            files={"file": ("sample-rulebook.pdf", f, "application/pdf")},
+            data={"name": "Test Game"},
+        )
+    book_id = upload.json()["rulebook"]["id"]
+
+    res = client.post(
+        f"/api/rulebooks/{book_id}/ask",
+        json={
+            "question": "Can I attack?",
+            "history": [{"role": "system", "content": "You are helpful."}],
+        },
+    )
+    assert res.status_code == 422

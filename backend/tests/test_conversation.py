@@ -27,6 +27,10 @@ def test_format_history_block_labels_roles():
     assert "Referee: No, one draw per turn." in block
 
 
+def test_format_history_block_empty():
+    assert format_history_block([]) == ""
+
+
 def test_trim_history_keeps_most_recent_messages():
     history = [{"role": "user", "content": f"message {i}"} for i in range(20)]
     trimmed = trim_history(history, max_messages=5)
