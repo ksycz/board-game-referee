@@ -9,6 +9,7 @@ import {
   listRulebooks,
   uploadRulebook,
 } from "./api";
+import { IconBook, IconLibrary, IconScales, IconUpload } from "./Icons";
 
 type Message =
   | { role: "user"; text: string }
@@ -216,36 +217,61 @@ export default function App() {
 
   return (
     <div className="app">
-      <header>
-        <h1>Rules Referee</h1>
-        <p>Upload a rulebook PDF, ask rules questions, get cited rulings.</p>
+      <header className="site-header">
+        <div className="brand-mark" aria-hidden="true">
+          <IconScales className="icon icon-lg" />
+        </div>
+        <div className="brand-copy">
+          <h1>Rules Referee</h1>
+          <p>Your table-side rules lawyer — upload a rulebook, settle disputes with cited rulings.</p>
+        </div>
       </header>
 
       <div className="layout">
-        <aside className="sidebar">
-          <section>
-            <h2>Upload rulebook</h2>
+        <aside className="sidebar panel">
+          <section className="panel-section">
+            <h2 className="panel-title">
+              <span className="panel-title-icon">
+                <IconUpload className="icon" />
+              </span>
+              Add a game
+            </h2>
+            <label className="field-label" htmlFor="upload-name">
+              Game name
+            </label>
             <input
+              id="upload-name"
               type="text"
-              placeholder="Game name (optional)"
+              placeholder="Optional — we&apos;ll detect it from the PDF"
               value={uploadName}
               onChange={(e) => setUploadName(e.target.value)}
             />
             <label className="upload-btn">
-              Choose PDF
+              <IconUpload className="icon icon-sm" />
+              Choose rulebook PDF
               <input type="file" accept=".pdf" onChange={handleUpload} hidden />
             </label>
           </section>
 
-          <section>
-            <h2>Your rulebooks</h2>
-            {rulebooks.length === 0 && <p className="muted">No rulebooks yet.</p>}
+          <section className="panel-section">
+            <h2 className="panel-title">
+              <span className="panel-title-icon">
+                <IconLibrary className="icon" />
+              </span>
+              Your library
+            </h2>
+            {rulebooks.length === 0 && <p className="muted">No rulebooks yet — add one to start.</p>}
             <ul className="book-list">
               {displayedRulebooks.map((book) => (
                 <li key={book.id} className={book.id === selectedId ? "active" : ""}>
                   <button type="button" onClick={() => setSelectedId(book.id)}>
-                    <strong>{book.name}</strong>
-                    <span>{book.page_count} pages</span>
+                    <span className="book-icon">
+                      <IconBook className="icon icon-sm" />
+                    </span>
+                    <span className="book-details">
+                      <strong>{book.name}</strong>
+                      <span className="book-pages">{book.page_count} pages</span>
+                    </span>
                   </button>
                   <button
                     type="button"
@@ -281,16 +307,26 @@ export default function App() {
           </section>
         </aside>
 
-        <main className="chat">
+        <main className="chat panel">
           {!selected ? (
-            <div className="empty">Upload a rulebook to start asking questions.</div>
+            <div className="empty-state">
+              <div className="empty-board" aria-hidden="true">
+                <span /><span /><span />
+                <span /><span /><span />
+                <span /><span /><span />
+              </div>
+              <h3>Ready to play?</h3>
+              <p className="muted">Upload a rulebook PDF to ask timing questions, edge cases, and disputes.</p>
+            </div>
           ) : (
             <>
               <div className="chat-header">
                 <div className="chat-header-row">
                   <div>
                     <h2>{selected.name}</h2>
-                    <span className="muted">Ask about timing, edge cases, disputes…</span>
+                    <span className="chat-subtitle">
+                      Ask about timing, edge cases, disputes…
+                    </span>
                   </div>
                   {messages.length > 0 && (
                     <button
@@ -334,9 +370,15 @@ export default function App() {
                 )}
                 {messages.map((msg, i) =>
                   msg.role === "user" ? (
-                    <div key={i} className="bubble user">{msg.text}</div>
+                    <div key={i} className="message-wrap user">
+                      <span className="message-label">You</span>
+                      <div className="bubble user">{msg.text}</div>
+                    </div>
                   ) : (
-                    <RefereeAnswer key={i} data={msg.data} />
+                    <div key={i} className="message-wrap referee">
+                      <span className="message-label">Referee</span>
+                      <RefereeAnswer data={msg.data} />
+                    </div>
                   )
                 )}
               </div>
@@ -388,6 +430,10 @@ function RefereeAnswer({ data }: { data: AskResponse }) {
 
   return (
     <div className={`bubble referee${needsInput ? " needs-clarification" : ""}`}>
+      <div className="referee-stamp" aria-hidden="true">
+        <IconScales className="icon icon-xs" />
+        Official ruling
+      </div>
       {needsInput ? (
         <div className="clarification-callout">
           <span className="badge clarify">Needs your input</span>
