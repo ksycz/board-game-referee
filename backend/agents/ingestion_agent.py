@@ -14,10 +14,13 @@ class IngestionAgent:
 
     def ingest(self, rulebook_id: str, pdf_path: Path) -> dict:
         chunks: list[TextChunk]
-        chunks, page_count = extract_chunks(pdf_path)
+        chunks, page_count, ocr_pages = extract_chunks(pdf_path)
         indexed = self.vector_store.index_rulebook(rulebook_id, chunks)
-        return {
+        result = {
             "agent": "ingestion",
             "pages_extracted": page_count,
             "chunks_indexed": indexed,
         }
+        if ocr_pages:
+            result["ocr_pages"] = ocr_pages
+        return result

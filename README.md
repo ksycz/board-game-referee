@@ -128,6 +128,10 @@ Copy `backend/.env.example` to `backend/.env`. Key variables:
 | `FAQ_CACHE` | `1` | Cache repeat questions (`0` to disable) |
 | `FAQ_CACHE_MAX_ENTRIES` | `100` | Max cached Q&A per rulebook |
 | `RETRIEVAL_TELEMETRY` | `1` | Log retrieval metrics to JSONL (`0` to disable) |
+| `OCR_FALLBACK` | `0` | OCR sparse PDF pages at upload (`1` to enable; requires [Tesseract](https://github.com/tesseract-ocr/tesseract)) |
+| `OCR_LANGUAGE` | `eng` | Tesseract language code(s) |
+| `OCR_DPI` | `150` | Render resolution for full-page OCR |
+| `OCR_MIN_INDEXABLE_CHARS` | `80` | Try OCR when a page has fewer indexable characters |
 
 ## Testing
 

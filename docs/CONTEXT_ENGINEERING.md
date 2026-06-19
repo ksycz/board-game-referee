@@ -199,16 +199,16 @@ Best fix, no code changes:
 2. Open the PDF and try selecting a sentence with your cursor. If you **can’t select real paragraph text**, the app will struggle too.
 3. Delete the game in the app and **re-upload** the better PDF.
 
-### Option B — OCR (future / optional)
+### Option B — OCR (optional)
 
-When pages are scanned or text is baked into images, run **OCR** at ingest time:
+When pages are scanned or text is baked into images, enable OCR at ingest time:
 
 | Piece | Approach |
 |-------|----------|
 | Engine | [Tesseract](https://github.com/tesseract-ocr/tesseract) via PyMuPDF `page.get_textpage_ocr()` |
 | When | Per page, only if normal extraction yields almost no indexable text |
 | Cost | Slower uploads; needs `tesseract` installed on the server (`brew install tesseract` on macOS) |
-| Config | Planned: `OCR_FALLBACK=1` in `.env` (not enabled by default) |
+| Config | `OCR_FALLBACK=1` in `.env` (off by default); set `OCR_LANGUAGE`, `OCR_DPI`, or `OCR_MIN_INDEXABLE_CHARS` as needed |
 
 Tradeoffs: OCR adds dependencies and latency; accuracy on stylized fonts and tables is imperfect. Prefer a text PDF when you can.
 

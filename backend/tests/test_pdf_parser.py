@@ -2,7 +2,11 @@
 
 import fitz
 
-from services.pdf_parser import chunk_page_text, extract_chunks
+from services.pdf_parser import (
+    _page_needs_ocr,
+    chunk_page_text,
+    extract_chunks,
+)
 
 
 def _make_pdf(pages: list[tuple[str, str]], path):
@@ -19,9 +23,10 @@ def test_short_page_stays_single_chunk(tmp_path):
     pdf = tmp_path / "short.pdf"
     _make_pdf([("Setup", "Each player draws 5 cards.")], pdf)
 
-    chunks, page_count = extract_chunks(pdf)
+    chunks, page_count, ocr_pages = extract_chunks(pdf)
 
     assert page_count == 1
+    assert ocr_pages == 0
     assert len(chunks) == 1
     assert chunks[0].page == 1
     assert chunks[0].section_hint == "Setup"
@@ -115,8 +120,75 @@ def test_multi_page_pdf_reports_page_count(tmp_path):
         pdf,
     )
 
-    chunks, page_count = extract_chunks(pdf)
+    chunks, page_count, ocr_pages = extract_chunks(pdf)
 
     assert page_count == 2
+    assert ocr_pages == 0
     assert len(chunks) == 2
     assert {chunk.page for chunk in chunks} == {1, 2}
+
+
+def test_page_needs_ocr_when_only_heading_and_page_number():
+    page_text = """Choose Actions
+
+2
+"""
+    chunks = chunk_page_text(1, page_text, max_chars=600, min_chars=80)
+
+    assert chunks == []
+    assert _page_needs_ocr(page_text, chunks) is True
+
+
+def test_page_needs_ocr_false_when_body_present():
+    page_text = """Choose Actions
+
+On your turn, choose one action from the list shown on your player board.
+"""
+    chunks = chunk_page_text(1, page_text, max_chars=600, min_chars=80)
+
+    assert len(chunks) == 1
+    assert _page_needs_ocr(page_text, chunks) is False
+
+
+def test_ocr_fallback_upgrades_sparse_page(monkeypatch, tmp_path):
+    from services import pdf_parser
+
+    pdf = tmp_path / "sparse.pdf"
+    _make_pdf([("Choose Actions", "2")], pdf)
+
+    monkeypatch.setattr(pdf_parser, "OCR_FALLBACK", True)
+
+    def fake_ocr(_page):
+        return (
+            "Choose Actions\n\n"
+            "On your turn, choose one action from the list shown on your player board."
+        )
+
+    monkeypatch.setattr(pdf_parser, "_extract_page_text_ocr", fake_ocr)
+
+    chunks, page_count, ocr_pages = extract_chunks(pdf)
+
+    assert page_count == 1
+    assert ocr_pages == 1
+    assert len(chunks) == 1
+    assert "choose one action" in chunks[0].text.lower()
+
+
+def test_ocr_fallback_disabled_skips_ocr(monkeypatch, tmp_path):
+    from services import pdf_parser
+
+    pdf = tmp_path / "sparse.pdf"
+    _make_pdf([("Choose Actions", "2")], pdf)
+
+    monkeypatch.setattr(pdf_parser, "OCR_FALLBACK", False)
+
+    def fail_ocr(_page):
+        raise AssertionError("OCR should not run when OCR_FALLBACK is disabled")
+
+    monkeypatch.setattr(pdf_parser, "_extract_page_text_ocr", fail_ocr)
+
+    chunks, page_count, ocr_pages = extract_chunks(pdf)
+
+    assert page_count == 0
+    assert ocr_pages == 0
+    assert chunks == []

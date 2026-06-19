@@ -2,13 +2,24 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
 import fitz
 
-from config import CHUNK_MAX_CHARS, CHUNK_MIN_CHARS
+from config import (
+    CHUNK_MAX_CHARS,
+    CHUNK_MIN_CHARS,
+    OCR_DPI,
+    OCR_FALLBACK,
+    OCR_LANGUAGE,
+    OCR_MIN_INDEXABLE_CHARS,
+)
+
+logger = logging.getLogger(__name__)
+_tesseract_missing_logged = False
 
 
 @dataclass(frozen=True)
@@ -74,6 +85,76 @@ def _extract_page_text(page: fitz.Page) -> str:
     if lines:
         return "\n".join(lines)
     return page.get_text("text")
+
+
+def _indexable_char_count(text: str) -> int:
+    """Approximate how much non-junk text a page contributes to retrieval."""
+    total = 0
+    for _, paragraph in _parse_page_segments(text):
+        if not _is_junk_paragraph(paragraph):
+            total += len(paragraph.strip())
+    return total
+
+
+def _page_needs_ocr(text: str, chunks: list[TextChunk]) -> bool:
+    """True when normal extraction left no indexable chunks."""
+    if chunks:
+        return False
+    return _indexable_char_count(text) < OCR_MIN_INDEXABLE_CHARS
+
+
+def _extract_page_text_ocr(page: fitz.Page) -> str | None:
+    """OCR a page image when Tesseract is available; otherwise return None."""
+    global _tesseract_missing_logged
+    try:
+        textpage = page.get_textpage_ocr(
+            language=OCR_LANGUAGE,
+            full=True,
+            dpi=OCR_DPI,
+        )
+        text = page.get_text("text", textpage=textpage).strip()
+        return text or None
+    except RuntimeError as exc:
+        if "Tesseract" in str(exc) and not _tesseract_missing_logged:
+            logger.warning(
+                "OCR_FALLBACK is enabled but Tesseract is not installed: %s",
+                exc,
+            )
+            _tesseract_missing_logged = True
+        return None
+    except Exception:
+        logger.exception("OCR failed for page %s", page.number + 1)
+        return None
+
+
+def _extract_page_chunks(
+    page: fitz.Page,
+    page_number: int,
+    *,
+    max_chars: int,
+    min_chars: int,
+) -> tuple[list[TextChunk], bool]:
+    """Extract chunks for one page, optionally falling back to OCR."""
+    text = _extract_page_text(page)
+    page_chunks = chunk_page_text(
+        page_number,
+        text,
+        max_chars=max_chars,
+        min_chars=min_chars,
+    )
+    used_ocr = False
+    if OCR_FALLBACK and _page_needs_ocr(text, page_chunks):
+        ocr_text = _extract_page_text_ocr(page)
+        if ocr_text and _indexable_char_count(ocr_text) > _indexable_char_count(text):
+            text = ocr_text
+            page_chunks = chunk_page_text(
+                page_number,
+                text,
+                max_chars=max_chars,
+                min_chars=min_chars,
+            )
+            used_ocr = True
+    return page_chunks, used_ocr
 
 
 def _split_by_sentences(text: str, max_chars: int) -> list[str]:
@@ -218,30 +299,35 @@ def extract_chunks(
     *,
     max_chars: int = CHUNK_MAX_CHARS,
     min_chars: int = CHUNK_MIN_CHARS,
-) -> tuple[list[TextChunk], int]:
-    """Extract searchable chunks from a PDF and return (chunks, page_count)."""
+) -> tuple[list[TextChunk], int, int]:
+    """Extract searchable chunks from a PDF.
+
+    Returns (chunks, pages_with_text, ocr_pages).
+    """
     doc = fitz.open(pdf_path)
     chunks: list[TextChunk] = []
     pages_with_text = 0
+    ocr_pages = 0
     try:
         for index in range(len(doc)):
             page = doc[index]
-            text = _extract_page_text(page)
-            page_chunks = chunk_page_text(
+            page_chunks, used_ocr = _extract_page_chunks(
+                page,
                 index + 1,
-                text,
                 max_chars=max_chars,
                 min_chars=min_chars,
             )
+            if used_ocr:
+                ocr_pages += 1
             if page_chunks:
                 pages_with_text += 1
                 chunks.extend(page_chunks)
     finally:
         doc.close()
-    return chunks, pages_with_text
+    return chunks, pages_with_text, ocr_pages
 
 
 def extract_pages(pdf_path: Path) -> list[TextChunk]:
     """Backward-compatible wrapper that returns chunks only."""
-    chunks, _ = extract_chunks(pdf_path)
+    chunks, _, _ = extract_chunks(pdf_path)
     return chunks
