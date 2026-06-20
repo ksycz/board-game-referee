@@ -256,6 +256,11 @@ class RefereePipeline:
     def set_rulebook_pinned(self, rulebook_id: str, pinned: bool) -> Rulebook | None:
         return self.store.set_pinned(rulebook_id, pinned)
 
+    def clear_faq_cache(self, rulebook_id: str) -> int:
+        if not self.store.get(rulebook_id):
+            raise KeyError(f"Rulebook not found: {rulebook_id}")
+        return self.faq_cache.clear_rulebook(rulebook_id)
+
     def dedupe_rulebooks(self) -> int:
         """Remove extra copies of the same PDF, keeping the oldest upload per hash."""
         self.store._backfill_content_hashes()

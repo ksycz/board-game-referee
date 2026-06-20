@@ -135,6 +135,12 @@ class FaqCache:
         if path.exists():
             path.unlink()
 
+    def clear_rulebook(self, rulebook_id: str) -> int:
+        book = self._load_book(rulebook_id)
+        count = len(book.get("entries", {}))
+        self.delete_rulebook(rulebook_id)
+        return count
+
     def list_entries(self, rulebook_id: str) -> list[dict[str, Any]]:
         book = self._load_book(rulebook_id)
         items = []

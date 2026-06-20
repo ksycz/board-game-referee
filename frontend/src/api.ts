@@ -387,6 +387,18 @@ export async function pinRulebook(rulebookId: string, pinned: boolean): Promise<
   return res.json();
 }
 
+export async function clearFaqCache(rulebookId: string): Promise<number> {
+  const res = await fetch(`${API}/api/rulebooks/${rulebookId}/faq-cache`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(err.detail) ?? "Could not clear FAQ cache");
+  }
+  const payload = await res.json();
+  return typeof payload.cleared === "number" ? payload.cleared : 0;
+}
+
 export type RulingFeedbackPayload = {
   response_id: string;
   helpful: boolean;

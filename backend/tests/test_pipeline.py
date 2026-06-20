@@ -140,3 +140,28 @@ def test_pipeline_ask_returns_cached_answer_without_second_llm_call(
     assert not first.get("cached")
     assert second["cached"] is True
     assert second["ruling"]["ruling"] == first["ruling"]["ruling"]
+
+
+def test_pipeline_clear_faq_cache_forces_fresh_answer(
+    sample_pdf,
+    isolated_data,
+):
+    pipeline = RefereePipeline()
+    upload = pipeline.upload_rulebook(
+        "Test Game", "test.pdf", sample_pdf.read_bytes(), original_filename="sample-rulebook.pdf"
+    )
+    book_id = upload["rulebook"].id
+
+    capturing = CapturingReferee()
+    pipeline._referee = capturing
+
+    pipeline.ask(book_id, "Can I attack on the first turn?")
+    pipeline.ask(book_id, "can i attack on the first turn?")
+    assert capturing.calls == 1
+
+    cleared = pipeline.clear_faq_cache(book_id)
+    assert cleared == 1
+
+    third = pipeline.ask(book_id, "Can I attack on the first turn?")
+    assert capturing.calls == 2
+    assert not third.get("cached")

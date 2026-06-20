@@ -282,6 +282,26 @@ def test_delete_unknown_rulebook_returns_404(client):
     assert res.json()["detail"] == "Rulebook not found"
 
 
+def test_clear_faq_cache(client, sample_pdf):
+    with sample_pdf.open("rb") as f:
+        upload = client.post(
+            "/api/rulebooks",
+            files={"file": ("sample-rulebook.pdf", f, "application/pdf")},
+            data={"name": "Test Game"},
+        )
+    book_id = upload.json()["rulebook"]["id"]
+
+    res = client.delete(f"/api/rulebooks/{book_id}/faq-cache")
+    assert res.status_code == 200
+    assert res.json() == {"cleared": 0}
+
+
+def test_clear_faq_cache_unknown_book_returns_404(client):
+    res = client.delete("/api/rulebooks/does-not-exist/faq-cache")
+    assert res.status_code == 404
+    assert res.json()["detail"] == "Rulebook not found"
+
+
 def test_ask_rejects_invalid_history_role(client, sample_pdf):
     with sample_pdf.open("rb") as f:
         upload = client.post(

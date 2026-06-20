@@ -178,6 +178,15 @@ def pin_rulebook(rulebook_id: str, body: PinRequest):
     return asdict(book)
 
 
+@app.delete("/api/rulebooks/{rulebook_id}/faq-cache")
+def clear_faq_cache(rulebook_id: str):
+    try:
+        cleared = pipeline.clear_faq_cache(rulebook_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Rulebook not found")
+    return {"cleared": cleared}
+
+
 @app.post("/api/rulebooks/{rulebook_id}/ask")
 def ask_rulebook(rulebook_id: str, body: AskRequest):
     try:

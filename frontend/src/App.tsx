@@ -6,6 +6,7 @@ import {
   Rulebook,
   SourceExcerpt,
   askRulebook,
+  clearFaqCache,
   deleteRulebook,
   disputeRulebook,
   fetchExampleQuestions,
@@ -326,6 +327,22 @@ export default function App() {
     }
   }
 
+  async function handleClearFaqCache(id: string, name: string) {
+    if (
+      !confirm(
+        `Clear cached answers for "${name}"? Repeat questions will call the referee again.`,
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    try {
+      await clearFaqCache(id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   async function handleDelete(id: string) {
     if (!confirm("Delete this rulebook?")) return;
     setLoading(true);
@@ -595,6 +612,16 @@ export default function App() {
                         New conversation
                       </button>
                     )}
+                    <button
+                      type="button"
+                      className="new-conversation"
+                      title="Clear cached repeat answers after re-index or errata"
+                      onClick={() => {
+                        void handleClearFaqCache(selected.id, selected.name);
+                      }}
+                    >
+                      Clear FAQ cache
+                    </button>
                   </div>
                 </div>
               </div>

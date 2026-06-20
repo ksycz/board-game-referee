@@ -74,6 +74,23 @@ def test_evicts_oldest_entries_when_over_limit(tmp_path):
     assert {"two", "three"} == labels
 
 
+def test_clear_rulebook_returns_entry_count(tmp_path):
+    cache = FaqCache(cache_dir=tmp_path / "faq", enabled=True)
+    base = {
+        "ruling": {"ruling": "Yes.", "needs_clarification": False},
+        "citation_check": {"all_valid": True},
+        "retrieval": {"pages": [1]},
+    }
+    cache.put("book-1", "one", {**base, "question": "one"}, label="one", mode="ask")
+    cache.put("book-1", "two", {**base, "question": "two"}, label="two", mode="ask")
+
+    cleared = cache.clear_rulebook("book-1")
+
+    assert cleared == 2
+    assert cache.get("book-1", "one") is None
+    assert not (tmp_path / "faq" / "book-1.json").exists()
+
+
 def test_delete_rulebook_removes_cache_file(tmp_path):
     cache = FaqCache(cache_dir=tmp_path / "faq", enabled=True)
     key = ask_lookup_key("Question?")
