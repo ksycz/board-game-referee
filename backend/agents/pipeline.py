@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Callable
 from pathlib import Path
 
@@ -14,8 +15,12 @@ from services.conversation import dispute_retrieval_query, retrieval_query, trim
 from services.example_questions import example_questions_for_rulebook
 from services.faq_cache import FaqCache, ask_lookup_key, dispute_lookup_key
 from services.game_name import derive_game_name, extract_game_name_from_pdf, looks_like_filename
-from services.retrieval_telemetry import compute_retrieval_metrics, log_retrieval_event
-from services.rulebook_store import DuplicateRulebookError, RulebookStore, pdf_content_hash
+from services.retrieval_telemetry import (
+    compute_retrieval_metrics,
+    log_retrieval_event,
+    log_ruling_feedback,
+)
+from services.rulebook_store import DuplicateRulebookError, Rulebook, RulebookStore, pdf_content_hash
 from services.vector_store import VectorStore
 
 
@@ -67,9 +72,11 @@ class RefereePipeline:
             response["ruling"],
             response["citation_check"],
         )
+        response["response_id"] = str(uuid.uuid4())
         response["retrieval"]["metrics"] = metrics
         log_retrieval_event(
             {
+                "response_id": response["response_id"],
                 "mode": response.get("mode", "ask"),
                 "rulebook_id": response["rulebook_id"],
                 "rulebook_name": response["rulebook_name"],
@@ -81,6 +88,12 @@ class RefereePipeline:
             }
         )
         return response
+
+    @staticmethod
+    def _with_response_id(response: dict) -> dict:
+        if response.get("response_id"):
+            return response
+        return {**response, "response_id": str(uuid.uuid4())}
 
     def upload_rulebook(
         self,
@@ -140,7 +153,7 @@ class RefereePipeline:
         if not prior:
             cached = self.faq_cache.get(rulebook_id, ask_lookup_key(question))
             if cached:
-                return cached
+                return self._with_response_id(cached)
 
         k = top_k or TOP_K_CHUNKS
         search_query = retrieval_query(question, prior)
@@ -193,7 +206,7 @@ class RefereePipeline:
                 dispute_lookup_key(situation, player_a, player_b),
             )
             if cached:
-                return cached
+                return self._with_response_id(cached)
 
         k = top_k or TOP_K_CHUNKS
         search_query = dispute_retrieval_query(situation, player_a, player_b)
@@ -228,12 +241,20 @@ class RefereePipeline:
             )
         return response
 
+    def record_feedback(self, rulebook_id: str, payload: dict) -> None:
+        if not self.store.get(rulebook_id):
+            raise KeyError(f"Rulebook not found: {rulebook_id}")
+        log_ruling_feedback({"rulebook_id": rulebook_id, **payload})
+
     def delete_rulebook(self, rulebook_id: str) -> bool:
         if not self.store.delete(rulebook_id):
             return False
         self.vector_store.delete_rulebook(rulebook_id)
         self.faq_cache.delete_rulebook(rulebook_id)
         return True
+
+    def set_rulebook_pinned(self, rulebook_id: str, pinned: bool) -> Rulebook | None:
+        return self.store.set_pinned(rulebook_id, pinned)
 
     def dedupe_rulebooks(self) -> int:
         """Remove extra copies of the same PDF, keeping the oldest upload per hash."""

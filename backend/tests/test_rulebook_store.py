@@ -46,3 +46,39 @@ def test_delete_unknown_rulebook_returns_false(tmp_path, monkeypatch):
 
     store = RulebookStore()
     assert store.delete("missing-id") is False
+
+
+def test_pinned_rulebooks_sort_to_top(tmp_path, monkeypatch):
+    rulebooks_dir = tmp_path / "rulebooks"
+    rulebooks_dir.mkdir()
+    monkeypatch.setattr("config.RULEBOOKS_DIR", rulebooks_dir)
+    monkeypatch.setattr("services.rulebook_store.RULEBOOKS_DIR", rulebooks_dir)
+
+    store = RulebookStore()
+    pdf_bytes = b"%PDF-1.4 test"
+    content_hash = pdf_content_hash(pdf_bytes)
+    older = store.add(name="Older", filename="older.pdf", page_count=2, content_hash=content_hash)
+    newer = store.add(
+        name="Newer",
+        filename="newer.pdf",
+        page_count=2,
+        content_hash=pdf_content_hash(b"%PDF-1.4 newer"),
+    )
+    (rulebooks_dir / older.filename).write_bytes(pdf_bytes)
+    (rulebooks_dir / newer.filename).write_bytes(b"%PDF-1.4 newer")
+
+    store.set_pinned(older.id, True)
+
+    listed = store.list()
+    assert listed[0].id == older.id
+    assert listed[0].pinned is True
+
+
+def test_set_pinned_unknown_rulebook_returns_none(tmp_path, monkeypatch):
+    rulebooks_dir = tmp_path / "rulebooks"
+    rulebooks_dir.mkdir()
+    monkeypatch.setattr("config.RULEBOOKS_DIR", rulebooks_dir)
+    monkeypatch.setattr("services.rulebook_store.RULEBOOKS_DIR", rulebooks_dir)
+
+    store = RulebookStore()
+    assert store.set_pinned("missing", True) is None

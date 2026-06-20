@@ -7,7 +7,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from config import RETRIEVAL_LOG_PATH, RETRIEVAL_TELEMETRY
+from config import (
+    RETRIEVAL_LOG_PATH,
+    RETRIEVAL_TELEMETRY,
+    RULING_FEEDBACK_ENABLED,
+    RULING_FEEDBACK_LOG_PATH,
+)
 
 
 def cited_pages(ruling: dict) -> list[int]:
@@ -68,6 +73,28 @@ def log_retrieval_event(
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        **event,
+    }
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+
+def log_ruling_feedback(
+    event: dict[str, Any],
+    *,
+    log_path: Path | None = None,
+    enabled: bool | None = None,
+) -> None:
+    if enabled is None:
+        enabled = RULING_FEEDBACK_ENABLED
+    if not enabled:
+        return
+
+    path = log_path or RULING_FEEDBACK_LOG_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "event": "ruling_feedback",
         **event,
     }
     with path.open("a", encoding="utf-8") as handle:

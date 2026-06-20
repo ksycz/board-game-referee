@@ -31,6 +31,7 @@ class Rulebook:
     page_count: int
     created_at: str
     content_hash: str = ""
+    pinned: bool = False
 
 
 class RulebookStore:
@@ -46,6 +47,7 @@ class RulebookStore:
         raw = json.loads(self._index_path.read_text(encoding="utf-8"))
         for item in raw:
             item.setdefault("content_hash", "")
+            item.setdefault("pinned", False)
             book = Rulebook(**item)
             self._rulebooks[book.id] = book
 
@@ -90,10 +92,22 @@ class RulebookStore:
                 changed = True
         if changed:
             self._save()
-        return sorted(self._rulebooks.values(), key=lambda b: b.created_at, reverse=True)
+        return sorted(
+            self._rulebooks.values(),
+            key=lambda book: (book.pinned, book.created_at),
+            reverse=True,
+        )
 
     def get(self, rulebook_id: str) -> Rulebook | None:
         return self._rulebooks.get(rulebook_id)
+
+    def set_pinned(self, rulebook_id: str, pinned: bool) -> Rulebook | None:
+        book = self._rulebooks.get(rulebook_id)
+        if not book:
+            return None
+        book.pinned = pinned
+        self._save()
+        return book
 
     def add(
         self,

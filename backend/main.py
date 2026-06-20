@@ -54,6 +54,20 @@ class DisputeRequest(BaseModel):
     top_k: Optional[int] = Field(default=None, ge=1, le=20)
 
 
+class PinRequest(BaseModel):
+    pinned: bool
+
+
+class RulingFeedbackRequest(BaseModel):
+    response_id: str = Field(min_length=8, max_length=64)
+    helpful: bool
+    mode: Literal["ask", "dispute"] = "ask"
+    cached: bool = False
+    confidence: Optional[Literal["high", "medium", "low"]] = None
+    question: Optional[str] = Field(default=None, max_length=2000)
+    retrieved_pages: list[int] = Field(default_factory=list, max_length=50)
+
+
 def _safe_filename(name: str) -> str:
     base = re.sub(r"[^\w.\-]+", "_", name).strip("._")
     return base or "rulebook.pdf"
@@ -156,6 +170,14 @@ def delete_rulebook(rulebook_id: str):
     return {"deleted": rulebook_id}
 
 
+@app.patch("/api/rulebooks/{rulebook_id}/pin")
+def pin_rulebook(rulebook_id: str, body: PinRequest):
+    book = pipeline.set_rulebook_pinned(rulebook_id, body.pinned)
+    if not book:
+        raise HTTPException(status_code=404, detail="Rulebook not found")
+    return asdict(book)
+
+
 @app.post("/api/rulebooks/{rulebook_id}/ask")
 def ask_rulebook(rulebook_id: str, body: AskRequest):
     try:
@@ -167,6 +189,15 @@ def ask_rulebook(rulebook_id: str, body: AskRequest):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/rulebooks/{rulebook_id}/feedback")
+def ruling_feedback(rulebook_id: str, body: RulingFeedbackRequest):
+    try:
+        pipeline.record_feedback(rulebook_id, body.model_dump())
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Rulebook not found")
+    return {"recorded": True}
 
 
 @app.post("/api/rulebooks/{rulebook_id}/dispute")

@@ -13,11 +13,13 @@ import {
   formatUploadSuccessMessage,
   isDuplicateRulebookError,
   listRulebooks,
+  pinRulebook,
+  submitRulingFeedback,
   uploadProgressPercent,
   uploadRulebook,
   type UploadProgress,
 } from "./api";
-import { IconBook, IconLibrary, IconScales, IconUpload } from "./Icons";
+import { IconBook, IconLibrary, IconPin, IconScales, IconThumbDown, IconThumbUp, IconUpload } from "./Icons";
 
 type ChatMode = "ask" | "dispute";
 
@@ -48,20 +50,32 @@ function buildHistory(messages: Message[]): HistoryMessage[] {
 
 const RULEBOOKS_PREVIEW_LIMIT = 5;
 
+function sortRulebooks(books: Rulebook[]): Rulebook[] {
+  return [...books].sort((left, right) => {
+    const leftPinned = left.pinned ? 1 : 0;
+    const rightPinned = right.pinned ? 1 : 0;
+    if (leftPinned !== rightPinned) {
+      return rightPinned - leftPinned;
+    }
+    return right.created_at.localeCompare(left.created_at);
+  });
+}
+
 function visibleRulebooks(
   books: Rulebook[],
   selectedId: string | null,
   showAll: boolean,
 ): Rulebook[] {
-  if (showAll || books.length <= RULEBOOKS_PREVIEW_LIMIT) {
-    return books;
+  const ordered = sortRulebooks(books);
+  if (showAll || ordered.length <= RULEBOOKS_PREVIEW_LIMIT) {
+    return ordered;
   }
 
-  const preview = books.slice(0, RULEBOOKS_PREVIEW_LIMIT);
+  const preview = ordered.slice(0, RULEBOOKS_PREVIEW_LIMIT);
   if (selectedId && !preview.some((book) => book.id === selectedId)) {
-    const selected = books.find((book) => book.id === selectedId);
+    const selected = ordered.find((book) => book.id === selectedId);
     if (selected) {
-      return [...books.slice(0, RULEBOOKS_PREVIEW_LIMIT - 1), selected];
+      return [...ordered.slice(0, RULEBOOKS_PREVIEW_LIMIT - 1), selected];
     }
   }
 
@@ -269,6 +283,18 @@ export default function App() {
     }
   }
 
+  async function handleTogglePin(id: string, pinned: boolean) {
+    setError(null);
+    try {
+      const updated = await pinRulebook(id, pinned);
+      setRulebooks((current) => sortRulebooks(
+        current.map((book) => (book.id === id ? updated : book)),
+      ));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   async function handleDelete(id: string) {
     if (!confirm("Delete this rulebook?")) return;
     setLoading(true);
@@ -380,9 +406,26 @@ export default function App() {
                       <IconBook className="icon icon-sm" />
                     </span>
                     <span className="book-details">
-                      <strong>{book.name}</strong>
+                      <strong>
+                        {book.pinned && (
+                          <IconPin className="icon book-pin-marker" />
+                        )}
+                        {book.name}
+                      </strong>
                       <span className="book-pages">{book.page_count} pages</span>
                     </span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`pin${book.pinned ? " pinned" : ""}`}
+                    aria-label={book.pinned ? `Unpin ${book.name}` : `Pin ${book.name}`}
+                    title={book.pinned ? "Unpin" : "Pin to top"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleTogglePin(book.id, !book.pinned);
+                    }}
+                  >
+                    <IconPin className="icon icon-sm" />
                   </button>
                   <button
                     type="button"
@@ -530,7 +573,7 @@ export default function App() {
                   ) : (
                     <div key={i} className="message-wrap referee">
                       <span className="message-label">Referee</span>
-                      <RefereeAnswer data={msg.data} />
+                      <RefereeAnswer rulebookId={selected.id} data={msg.data} />
                     </div>
                   )
                 )}
@@ -632,7 +675,7 @@ export default function App() {
   );
 }
 
-function RefereeAnswer({ data }: { data: AskResponse }) {
+function RefereeAnswer({ rulebookId, data }: { rulebookId: string; data: AskResponse }) {
   const { ruling, citation_check } = data;
   const needsInput = ruling.needs_clarification && ruling.clarification_question;
   const isDispute = data.mode === "dispute";
@@ -688,10 +731,80 @@ function RefereeAnswer({ data }: { data: AskResponse }) {
         <CitationsList data={data} />
       )}
 
+      {!needsInput && (
+        <RulingFeedback rulebookId={rulebookId} data={data} />
+      )}
+
       <details>
         <summary>Agent trace ({data.retrieval.chunks_found} passages from pages {data.retrieval.pages.join(", ")})</summary>
         <pre>{JSON.stringify(data, null, 2)}</pre>
       </details>
+    </div>
+  );
+}
+
+function RulingFeedback({ rulebookId, data }: { rulebookId: string; data: AskResponse }) {
+  const [submitted, setSubmitted] = useState<"up" | "down" | null>(null);
+  const [pending, setPending] = useState(false);
+
+  if (!data.response_id) {
+    return null;
+  }
+
+  async function submit(helpful: boolean) {
+    if (submitted || pending) {
+      return;
+    }
+    setPending(true);
+    try {
+      await submitRulingFeedback(rulebookId, {
+        response_id: data.response_id!,
+        helpful,
+        mode: data.mode,
+        cached: data.cached,
+        confidence: data.ruling.confidence,
+        question: data.question ?? data.situation,
+        retrieved_pages: data.retrieval.pages,
+      });
+      setSubmitted(helpful ? "up" : "down");
+    } catch {
+      // Non-fatal: ruling still stands if feedback fails to save.
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="ruling-feedback" aria-live="polite">
+      {submitted ? (
+        <p className="ruling-feedback-thanks">Thanks for your feedback.</p>
+      ) : (
+        <>
+          <span className="ruling-feedback-label">Was this helpful?</span>
+          <div className="ruling-feedback-actions">
+            <button
+              type="button"
+              className="ruling-feedback-btn"
+              aria-label="Yes, this ruling was helpful"
+              title="Helpful"
+              disabled={pending}
+              onClick={() => void submit(true)}
+            >
+              <IconThumbUp className="icon icon-sm" />
+            </button>
+            <button
+              type="button"
+              className="ruling-feedback-btn"
+              aria-label="No, this ruling was not helpful"
+              title="Not helpful"
+              disabled={pending}
+              onClick={() => void submit(false)}
+            >
+              <IconThumbDown className="icon icon-sm" />
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

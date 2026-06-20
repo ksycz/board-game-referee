@@ -377,6 +377,32 @@ body::before {
   color: var(--ink-soft);
 }
 
+.book-pin-marker {
+  display: inline-block;
+  vertical-align: -0.15em;
+  margin-right: 0.25rem;
+  color: var(--accent);
+}
+
+.book-list .pin {
+  align-self: center;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  padding: 0 0.2rem;
+  opacity: 0.45;
+  transition: opacity 0.12s ease, color 0.12s ease;
+}
+
+.book-list .pin:hover,
+.book-list .pin.pinned {
+  opacity: 1;
+  color: var(--accent);
+}
+
 .book-list .delete {
   align-self: center;
   border: none;
@@ -1146,6 +1172,58 @@ body::before {
   background: var(--surface-sunken);
   border: 1px solid var(--border);
   line-height: 1.6;
+}
+
+.ruling-feedback {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.ruling-feedback-label {
+  font-size: 0.82rem;
+  color: var(--ink-muted);
+}
+
+.ruling-feedback-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.ruling-feedback-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+
+.ruling-feedback-btn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, white);
+}
+
+.ruling-feedback-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.ruling-feedback-thanks {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--ink-muted);
 }
 
 details {

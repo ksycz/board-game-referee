@@ -60,6 +60,28 @@ def test_log_retrieval_event_writes_jsonl(tmp_path):
     assert "timestamp" in first
 
 
+def test_log_ruling_feedback_writes_jsonl(tmp_path):
+    from services.retrieval_telemetry import log_ruling_feedback
+
+    log_path = tmp_path / "feedback.jsonl"
+    log_ruling_feedback(
+        {
+            "rulebook_id": "book-1",
+            "response_id": "resp-123",
+            "helpful": True,
+            "mode": "ask",
+        },
+        log_path=log_path,
+        enabled=True,
+    )
+
+    payload = json.loads(log_path.read_text(encoding="utf-8").strip())
+    assert payload["event"] == "ruling_feedback"
+    assert payload["helpful"] is True
+    assert payload["response_id"] == "resp-123"
+    assert "timestamp" in payload
+
+
 def test_summarize_telemetry_log(tmp_path):
     log_path = tmp_path / "telemetry.jsonl"
     events = [

@@ -24,6 +24,7 @@ export type Rulebook = {
   filename: string;
   page_count: number;
   created_at: string;
+  pinned?: boolean;
 };
 
 export type Citation = {
@@ -62,6 +63,7 @@ export type RetrievalMetrics = {
 };
 
 export type AskResponse = {
+  response_id?: string;
   mode: "ask" | "dispute";
   cached?: boolean;
   cached_at?: string;
@@ -369,5 +371,43 @@ export async function deleteRulebook(rulebookId: string): Promise<void> {
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(parseErrorDetail(err.detail) ?? "Delete failed");
+  }
+}
+
+export async function pinRulebook(rulebookId: string, pinned: boolean): Promise<Rulebook> {
+  const res = await fetch(`${API}/api/rulebooks/${rulebookId}/pin`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pinned }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(err.detail) ?? "Could not update pin");
+  }
+  return res.json();
+}
+
+export type RulingFeedbackPayload = {
+  response_id: string;
+  helpful: boolean;
+  mode: "ask" | "dispute";
+  cached?: boolean;
+  confidence?: "high" | "medium" | "low";
+  question?: string;
+  retrieved_pages?: number[];
+};
+
+export async function submitRulingFeedback(
+  rulebookId: string,
+  payload: RulingFeedbackPayload,
+): Promise<void> {
+  const res = await fetch(`${API}/api/rulebooks/${rulebookId}/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(err.detail) ?? "Could not save feedback");
   }
 }

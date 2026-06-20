@@ -21,6 +21,11 @@ RETRIEVAL_TELEMETRY = _telemetry in ("1", "true", "yes", "on")
 RETRIEVAL_LOG_PATH = Path(
     os.getenv("RETRIEVAL_LOG_PATH", str(DATA_DIR / "retrieval_telemetry.jsonl"))
 )
+RULING_FEEDBACK_LOG_PATH = Path(
+    os.getenv("RULING_FEEDBACK_LOG_PATH", str(DATA_DIR / "ruling_feedback.jsonl"))
+)
+_feedback = os.getenv("RULING_FEEDBACK", "1").strip().lower()
+RULING_FEEDBACK_ENABLED = _feedback in ("1", "true", "yes", "on")
 
 _faq_cache = os.getenv("FAQ_CACHE", "1").strip().lower()
 FAQ_CACHE_ENABLED = _faq_cache in ("1", "true", "yes", "on")

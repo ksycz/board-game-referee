@@ -1,6 +1,7 @@
 """API smoke tests using FastAPI TestClient."""
 
 import importlib
+import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -147,6 +148,33 @@ def test_upload_stream_duplicate_emits_duplicate_event(client, sample_pdf):
     assert '"example_questions"' in res.text
 
 
+def test_pin_rulebook(client, sample_pdf):
+    with sample_pdf.open("rb") as f:
+        upload = client.post(
+            "/api/rulebooks",
+            files={"file": ("sample-rulebook.pdf", f, "application/pdf")},
+            data={"name": "Pin Test"},
+        )
+    book_id = upload.json()["rulebook"]["id"]
+
+    pin = client.patch(f"/api/rulebooks/{book_id}/pin", json={"pinned": True})
+    assert pin.status_code == 200
+    assert pin.json()["pinned"] is True
+
+    listed = client.get("/api/rulebooks").json()
+    assert listed[0]["id"] == book_id
+    assert listed[0]["pinned"] is True
+
+    unpin = client.patch(f"/api/rulebooks/{book_id}/pin", json={"pinned": False})
+    assert unpin.status_code == 200
+    assert unpin.json()["pinned"] is False
+
+
+def test_pin_unknown_rulebook_returns_404(client):
+    res = client.patch("/api/rulebooks/missing-id/pin", json={"pinned": True})
+    assert res.status_code == 404
+
+
 def test_ask_without_api_key_returns_error(client, sample_pdf):
     with sample_pdf.open("rb") as f:
         upload = client.post(
@@ -291,4 +319,48 @@ def test_rulebook_examples(client, sample_pdf):
 
 def test_rulebook_examples_unknown_book_returns_404(client):
     res = client.get("/api/rulebooks/missing-id/examples")
+    assert res.status_code == 404
+
+
+def test_ruling_feedback(client, sample_pdf, tmp_path, monkeypatch):
+    monkeypatch.setattr("config.RULING_FEEDBACK_LOG_PATH", tmp_path / "feedback.jsonl")
+    monkeypatch.setattr("services.retrieval_telemetry.RULING_FEEDBACK_LOG_PATH", tmp_path / "feedback.jsonl")
+
+    with sample_pdf.open("rb") as f:
+        upload = client.post(
+            "/api/rulebooks",
+            files={"file": ("sample-rulebook.pdf", f, "application/pdf")},
+            data={"name": "Test Game"},
+        )
+    book_id = upload.json()["rulebook"]["id"]
+
+    res = client.post(
+        f"/api/rulebooks/{book_id}/feedback",
+        json={
+            "response_id": "abc12345-response",
+            "helpful": False,
+            "mode": "ask",
+            "cached": True,
+            "confidence": "medium",
+            "question": "Can I attack?",
+            "retrieved_pages": [1, 2],
+        },
+    )
+    assert res.status_code == 200
+    assert res.json() == {"recorded": True}
+
+    payload = json.loads((tmp_path / "feedback.jsonl").read_text(encoding="utf-8").strip())
+    assert payload["helpful"] is False
+    assert payload["rulebook_id"] == book_id
+    assert payload["response_id"] == "abc12345-response"
+
+
+def test_ruling_feedback_unknown_book_returns_404(client):
+    res = client.post(
+        "/api/rulebooks/missing-id/feedback",
+        json={
+            "response_id": "abc12345-response",
+            "helpful": True,
+        },
+    )
     assert res.status_code == 404
