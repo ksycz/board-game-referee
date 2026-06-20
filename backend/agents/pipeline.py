@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from agents.citation_agent import CitationAgent
@@ -88,6 +89,7 @@ class RefereePipeline:
         pdf_bytes: bytes,
         *,
         original_filename: str,
+        on_progress: Callable[[dict], None] | None = None,
     ) -> dict:
         content_hash = pdf_content_hash(pdf_bytes)
         existing = self.store.find_by_content_hash(content_hash)
@@ -104,7 +106,11 @@ class RefereePipeline:
         pdf_path.write_bytes(pdf_bytes)
 
         book.name = derive_game_name(pdf_path, original_filename, name)
-        ingest_result = self.ingestion.ingest(book.id, pdf_path)
+        ingest_result = self.ingestion.ingest(
+            book.id,
+            pdf_path,
+            on_progress=on_progress,
+        )
         book.page_count = ingest_result["pages_extracted"]
         self.store._save()
 

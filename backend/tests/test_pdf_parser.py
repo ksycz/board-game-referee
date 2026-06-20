@@ -211,3 +211,24 @@ def test_ocr_fallback_disabled_skips_ocr(monkeypatch, tmp_path):
     assert page_count == 0
     assert ocr_pages == 0
     assert chunks == []
+
+
+def test_extract_chunks_reports_progress(tmp_path):
+    pdf = tmp_path / "multi.pdf"
+    _make_pdf(
+        [
+            ("Setup", "Each player draws 5 cards."),
+            ("Combat", "To attack, discard one card and roll the die."),
+        ],
+        pdf,
+    )
+
+    events: list[dict] = []
+    extract_chunks(pdf, on_progress=events.append)
+
+    phases = [event["phase"] for event in events]
+    assert phases[0] == "starting"
+    assert "reading" in phases
+    assert events[0]["total_pages"] == 2
+    assert any(event["page"] == 1 for event in events if event["phase"] == "reading")
+    assert any(event["page"] == 2 for event in events if event["phase"] == "reading")

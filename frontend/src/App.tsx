@@ -9,10 +9,13 @@ import {
   deleteRulebook,
   disputeRulebook,
   fetchExampleQuestions,
+  formatUploadProgressMessage,
   formatUploadSuccessMessage,
   isDuplicateRulebookError,
   listRulebooks,
+  uploadProgressPercent,
   uploadRulebook,
+  type UploadProgress,
 } from "./api";
 import { IconBook, IconLibrary, IconScales, IconUpload } from "./Icons";
 
@@ -78,6 +81,8 @@ export default function App() {
   const [disputePlayerB, setDisputePlayerB] = useState("");
   const [uploadName, setUploadName] = useState("");
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [showAllRulebooks, setShowAllRulebooks] = useState(false);
@@ -155,11 +160,14 @@ export default function App() {
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setLoading(true);
+    setUploading(true);
+    setUploadProgress({ phase: "starting", page: 0, total_pages: 0 });
     setError(null);
     setInfo(null);
     try {
-      const upload = await uploadRulebook(file, uploadName || undefined);
+      const upload = await uploadRulebook(file, uploadName || undefined, (progress) => {
+        setUploadProgress(progress);
+      });
       setUploadName("");
       setSelectedId(upload.rulebook.id);
       setExamples((current) => ({
@@ -186,7 +194,8 @@ export default function App() {
         setError(err instanceof Error ? err.message : String(err));
       }
     } finally {
-      setLoading(false);
+      setUploading(false);
+      setUploadProgress(null);
       e.target.value = "";
     }
   }
@@ -330,12 +339,29 @@ export default function App() {
               placeholder="Optional — we&apos;ll detect it from the PDF"
               value={uploadName}
               onChange={(e) => setUploadName(e.target.value)}
+              disabled={uploading}
             />
-            <label className="upload-btn">
+            <label className={`upload-btn${uploading ? " upload-btn-busy" : ""}`}>
               <IconUpload className="icon icon-sm" />
-              Choose rulebook PDF
-              <input type="file" accept=".pdf" onChange={handleUpload} hidden />
+              {uploading ? "Processing…" : "Choose rulebook PDF"}
+              <input type="file" accept=".pdf" onChange={handleUpload} hidden disabled={uploading} />
             </label>
+            {uploading && uploadProgress && (
+              <div className="upload-progress" role="status" aria-live="polite">
+                <p className="upload-progress-label">
+                  {formatUploadProgressMessage(uploadProgress)}
+                </p>
+                <div
+                  className="upload-progress-track"
+                  aria-hidden="true"
+                >
+                  <div
+                    className="upload-progress-bar"
+                    style={{ width: `${uploadProgressPercent(uploadProgress)}%` }}
+                  />
+                </div>
+              </div>
+            )}
           </section>
 
           <section className="panel-section">

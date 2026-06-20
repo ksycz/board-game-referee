@@ -93,6 +93,60 @@ def test_list_dedupes_existing_duplicates(client, sample_pdf):
     assert store.get(second.id) is None
 
 
+def test_upload_stream_emits_progress_and_complete(client, sample_pdf):
+    with sample_pdf.open("rb") as f:
+        res = client.post(
+            "/api/rulebooks/upload-stream",
+            files={"file": ("sample-rulebook.pdf", f, "application/pdf")},
+            data={"name": "Stream Game"},
+        )
+    assert res.status_code == 200
+    assert "text/event-stream" in res.headers.get("content-type", "")
+
+    events: list[tuple[str, dict]] = []
+    for block in res.text.strip().split("\n\n"):
+        if not block.strip():
+            continue
+        event_name = "message"
+        data_line = ""
+        for line in block.split("\n"):
+            if line.startswith("event:"):
+                event_name = line.split(":", 1)[1].strip()
+            elif line.startswith("data:"):
+                data_line = line.split(":", 1)[1].strip()
+        if data_line:
+            import json
+
+            events.append((event_name, json.loads(data_line)))
+
+    event_names = [name for name, _ in events]
+    assert "progress" in event_names
+    assert "complete" in event_names
+
+    complete = next(payload for name, payload in events if name == "complete")
+    assert complete["rulebook"]["name"] == "Stream Game"
+    assert complete["ingestion"]["pages_extracted"] == 4
+
+
+def test_upload_stream_duplicate_emits_duplicate_event(client, sample_pdf):
+    with sample_pdf.open("rb") as f:
+        client.post(
+            "/api/rulebooks/upload-stream",
+            files={"file": ("sample-rulebook.pdf", f, "application/pdf")},
+            data={"name": "First"},
+        )
+
+    with sample_pdf.open("rb") as f:
+        res = client.post(
+            "/api/rulebooks/upload-stream",
+            files={"file": ("copy.pdf", f, "application/pdf")},
+            data={"name": "Second"},
+        )
+    assert res.status_code == 200
+    assert "event: duplicate" in res.text
+    assert '"example_questions"' in res.text
+
+
 def test_ask_without_api_key_returns_error(client, sample_pdf):
     with sample_pdf.open("rb") as f:
         upload = client.post(

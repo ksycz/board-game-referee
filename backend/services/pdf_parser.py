@@ -6,8 +6,10 @@ import logging
 import os
 import re
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import fitz
 
@@ -52,6 +54,13 @@ class TextChunk:
 
 # Backward-compatible alias used elsewhere in the codebase.
 PageChunk = TextChunk
+
+ProgressCallback = Callable[[dict[str, Any]], None]
+
+
+def _emit_progress(on_progress: ProgressCallback | None, event: dict[str, Any]) -> None:
+    if on_progress is not None:
+        on_progress(event)
 
 
 def _is_heading(line: str) -> bool:
@@ -173,6 +182,8 @@ def _extract_page_chunks(
     *,
     max_chars: int,
     min_chars: int,
+    total_pages: int = 0,
+    on_progress: ProgressCallback | None = None,
 ) -> tuple[list[TextChunk], bool]:
     """Extract chunks for one page, optionally falling back to OCR."""
     text = _extract_page_text(page)
@@ -184,6 +195,14 @@ def _extract_page_chunks(
     )
     used_ocr = False
     if OCR_FALLBACK and _page_needs_ocr(text, page_chunks):
+        _emit_progress(
+            on_progress,
+            {
+                "phase": "scanning",
+                "page": page_number,
+                "total_pages": total_pages,
+            },
+        )
         ocr_text = _extract_page_text_ocr(page)
         if ocr_text and _indexable_char_count(ocr_text) > _indexable_char_count(text):
             text = ocr_text
@@ -339,6 +358,7 @@ def extract_chunks(
     *,
     max_chars: int = CHUNK_MAX_CHARS,
     min_chars: int = CHUNK_MIN_CHARS,
+    on_progress: ProgressCallback | None = None,
 ) -> tuple[list[TextChunk], int, int]:
     """Extract searchable chunks from a PDF.
 
@@ -348,16 +368,32 @@ def extract_chunks(
     chunks: list[TextChunk] = []
     pages_with_text = 0
     ocr_pages = 0
+    total_pages = len(doc)
     if OCR_FALLBACK:
         ensure_tesseract_path()
+    _emit_progress(
+        on_progress,
+        {"phase": "starting", "page": 0, "total_pages": total_pages},
+    )
     try:
-        for index in range(len(doc)):
+        for index in range(total_pages):
+            page_number = index + 1
+            _emit_progress(
+                on_progress,
+                {
+                    "phase": "reading",
+                    "page": page_number,
+                    "total_pages": total_pages,
+                },
+            )
             page = doc[index]
             page_chunks, used_ocr = _extract_page_chunks(
                 page,
-                index + 1,
+                page_number,
                 max_chars=max_chars,
                 min_chars=min_chars,
+                total_pages=total_pages,
+                on_progress=on_progress,
             )
             if used_ocr:
                 ocr_pages += 1

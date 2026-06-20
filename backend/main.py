@@ -10,13 +10,14 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from agents.pipeline import RefereePipeline
 from config import CORS_ORIGINS, ensure_dirs
 from services.rulebook_store import DuplicateRulebookError
+from services.upload_stream import stream_rulebook_upload
 
 ensure_dirs()
 
@@ -58,6 +59,41 @@ def _safe_filename(name: str) -> str:
     return base or "rulebook.pdf"
 
 
+async def _read_upload_pdf(file: UploadFile) -> tuple[bytes, str]:
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF rulebooks are supported")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty file")
+    return content, file.filename
+
+
+@app.post("/api/rulebooks/upload-stream")
+async def upload_rulebook_stream(
+    file: UploadFile = File(...),
+    name: Optional[str] = Form(default=None),
+):
+    content, original_filename = await _read_upload_pdf(file)
+    display_name = (name or "").strip() or None
+    stored_name = f"{uuid.uuid4()}_{_safe_filename(original_filename)}"
+
+    return StreamingResponse(
+        stream_rulebook_upload(
+            pipeline,
+            display_name=display_name,
+            stored_name=stored_name,
+            pdf_bytes=content,
+            original_filename=original_filename,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
@@ -74,22 +110,16 @@ async def upload_rulebook(
     file: UploadFile = File(...),
     name: Optional[str] = Form(default=None),
 ):
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF rulebooks are supported")
-
-    content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Empty file")
-
+    content, original_filename = await _read_upload_pdf(file)
     display_name = (name or "").strip() or None
-    stored_name = f"{uuid.uuid4()}_{_safe_filename(file.filename)}"
+    stored_name = f"{uuid.uuid4()}_{_safe_filename(original_filename)}"
 
     try:
         result = pipeline.upload_rulebook(
             display_name,
             stored_name,
             content,
-            original_filename=file.filename,
+            original_filename=original_filename,
         )
     except DuplicateRulebookError as exc:
         existing = exc.existing

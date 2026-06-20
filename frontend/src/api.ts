@@ -95,6 +95,12 @@ export type AskResponse = {
   };
 };
 
+export type UploadProgress = {
+  phase: "starting" | "reading" | "scanning" | "indexing";
+  page: number;
+  total_pages: number;
+};
+
 export type IngestionResult = {
   agent: string;
   pages_extracted: number;
@@ -126,6 +132,124 @@ export function formatUploadSuccessMessage(name: string, ingestion?: IngestionRe
   return `"${name}" is ready — you can ask rules questions now.`;
 }
 
+export function formatUploadProgressMessage(progress: UploadProgress): string {
+  const { phase, page, total_pages } = progress;
+  if (phase === "starting") return "Opening PDF…";
+  if (phase === "indexing") return "Building search index…";
+  if (phase === "scanning" && total_pages > 0) {
+    return `Scanning page ${page} of ${total_pages} (mostly graphics)…`;
+  }
+  if (phase === "reading" && total_pages > 0) {
+    return `Reading page ${page} of ${total_pages}…`;
+  }
+  return "Processing rulebook…";
+}
+
+export function uploadProgressPercent(progress: UploadProgress): number {
+  const { phase, page, total_pages } = progress;
+  if (phase === "indexing") return 95;
+  if (phase === "starting" || total_pages <= 0) return 5;
+  const pageFraction = page / total_pages;
+  if (phase === "scanning") return Math.min(90, 5 + pageFraction * 85);
+  return Math.min(88, 5 + pageFraction * 83);
+}
+
+type UploadStreamEvent =
+  | { type: "progress"; progress: UploadProgress }
+  | { type: "complete"; data: UploadResponse }
+  | { type: "duplicate"; rulebook: Rulebook; example_questions: string[]; message: string }
+  | { type: "error"; message: string };
+
+function parseSseChunk(buffer: string): { events: UploadStreamEvent[]; rest: string } {
+  const events: UploadStreamEvent[] = [];
+  const parts = buffer.split("\n\n");
+  const rest = parts.pop() ?? "";
+
+  for (const part of parts) {
+    if (!part.trim()) continue;
+    let eventName = "message";
+    let dataLine = "";
+    for (const line of part.split("\n")) {
+      if (line.startsWith("event:")) {
+        eventName = line.slice(6).trim();
+      } else if (line.startsWith("data:")) {
+        dataLine += line.slice(5).trim();
+      }
+    }
+    if (!dataLine) continue;
+
+    const payload = JSON.parse(dataLine) as Record<string, unknown>;
+    if (eventName === "progress") {
+      events.push({
+        type: "progress",
+        progress: {
+          phase: payload.phase as UploadProgress["phase"],
+          page: Number(payload.page ?? 0),
+          total_pages: Number(payload.total_pages ?? 0),
+        },
+      });
+    } else if (eventName === "complete") {
+      events.push({
+        type: "complete",
+        data: {
+          rulebook: payload.rulebook as Rulebook,
+          example_questions: (payload.example_questions as string[]) ?? [],
+          ingestion: payload.ingestion as IngestionResult | undefined,
+        },
+      });
+    } else if (eventName === "duplicate") {
+      events.push({
+        type: "duplicate",
+        rulebook: payload.rulebook as Rulebook,
+        example_questions: (payload.example_questions as string[]) ?? [],
+        message: String(payload.message ?? "This rulebook is already in your library."),
+      });
+    } else if (eventName === "error") {
+      events.push({
+        type: "error",
+        message: String(payload.message ?? "Upload failed"),
+      });
+    }
+  }
+
+  return { events, rest };
+}
+
+async function readUploadStream(
+  body: ReadableStream<Uint8Array>,
+  onProgress?: (progress: UploadProgress) => void,
+): Promise<UploadStreamEvent> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parsed = parseSseChunk(buffer);
+    buffer = parsed.rest;
+    for (const event of parsed.events) {
+      if (event.type === "progress") {
+        onProgress?.(event.progress);
+      } else {
+        return event;
+      }
+    }
+  }
+
+  const parsed = parseSseChunk(`${buffer}\n\n`);
+  for (const event of parsed.events) {
+    if (event.type === "progress") {
+      onProgress?.(event.progress);
+    } else {
+      return event;
+    }
+  }
+
+  throw new Error("Upload ended before the server finished processing.");
+}
+
 export class DuplicateRulebookError extends Error {
   readonly rulebook: Rulebook;
   readonly example_questions: string[];
@@ -154,28 +278,39 @@ export async function listRulebooks(): Promise<Rulebook[]> {
   return res.json();
 }
 
-export async function uploadRulebook(file: File, name?: string): Promise<UploadResponse> {
+export async function uploadRulebook(
+  file: File,
+  name?: string,
+  onProgress?: (progress: UploadProgress) => void,
+): Promise<UploadResponse> {
   const form = new FormData();
   form.append("file", file);
   if (name) form.append("name", name);
 
-  const res = await fetch(`${API}/api/rulebooks`, { method: "POST", body: form });
-  const data = await res.json().catch(() => ({}));
-  if (res.status === 409 && data.detail?.rulebook) {
-    throw new DuplicateRulebookError(
-      parseErrorDetail(data.detail) ?? "This rulebook is already in your library.",
-      data.detail.rulebook,
-      data.detail.example_questions ?? [],
-    );
-  }
+  const res = await fetch(`${API}/api/rulebooks/upload-stream`, { method: "POST", body: form });
   if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
     throw new Error(parseErrorDetail(data.detail) ?? "Upload failed");
   }
-  return {
-    rulebook: data.rulebook,
-    example_questions: data.example_questions ?? [],
-    ingestion: data.ingestion,
-  };
+  if (!res.body) {
+    throw new Error("Upload failed — no response from server.");
+  }
+
+  const result = await readUploadStream(res.body, onProgress);
+  if (result.type === "complete") {
+    return result.data;
+  }
+  if (result.type === "duplicate") {
+    throw new DuplicateRulebookError(
+      result.message,
+      result.rulebook,
+      result.example_questions,
+    );
+  }
+  if (result.type === "error") {
+    throw new Error(result.message);
+  }
+  throw new Error("Upload failed.");
 }
 
 export async function fetchExampleQuestions(rulebookId: string): Promise<string[]> {
