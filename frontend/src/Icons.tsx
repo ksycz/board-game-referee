@@ -78,6 +78,25 @@ export function IconThumbUp({ className }: IconProps) {
   );
 }
 
+export function IconMenu({ className }: IconProps) {
+  return (
+    <Icon className={className}>
+      <path d="M4 7h16" />
+      <path d="M4 12h16" />
+      <path d="M4 17h16" />
+    </Icon>
+  );
+}
+
+export function IconClose({ className }: IconProps) {
+  return (
+    <Icon className={className}>
+      <path d="M6 6l12 12" />
+      <path d="m18 6-12 12" />
+    </Icon>
+  );
+}
+
 export function IconThumbDown({ className }: IconProps) {
   return (
     <Icon className={className}>

@@ -19,7 +19,17 @@ import {
   uploadRulebook,
   type UploadProgress,
 } from "./api";
-import { IconBook, IconLibrary, IconPin, IconScales, IconThumbDown, IconThumbUp, IconUpload } from "./Icons";
+import {
+  IconBook,
+  IconClose,
+  IconLibrary,
+  IconMenu,
+  IconPin,
+  IconScales,
+  IconThumbDown,
+  IconThumbUp,
+  IconUpload,
+} from "./Icons";
 
 type ChatMode = "ask" | "dispute";
 
@@ -100,7 +110,13 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [showAllRulebooks, setShowAllRulebooks] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  function selectRulebook(id: string) {
+    setSelectedId(id);
+    setLibraryOpen(false);
+  }
 
   const displayedRulebooks = visibleRulebooks(rulebooks, selectedId, showAllRulebooks);
   const hiddenRulebookCount = showAllRulebooks
@@ -144,6 +160,17 @@ export default function App() {
       inputRef.current?.focus();
     }
   }, [clarification]);
+
+  useEffect(() => {
+    if (!libraryOpen) {
+      return;
+    }
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [libraryOpen]);
 
   useEffect(() => {
     if (!selectedId || examples[selectedId]) {
@@ -354,7 +381,28 @@ export default function App() {
       )}
 
       <div className="layout">
-        <aside className="sidebar panel">
+        {libraryOpen && (
+          <button
+            type="button"
+            className="sidebar-backdrop"
+            aria-label="Close library"
+            onClick={() => setLibraryOpen(false)}
+          />
+        )}
+
+        <aside className={`sidebar panel${libraryOpen ? " open" : ""}`}>
+          <div className="sidebar-mobile-header">
+            <h2>Your library</h2>
+            <button
+              type="button"
+              className="sidebar-close"
+              aria-label="Close library"
+              onClick={() => setLibraryOpen(false)}
+            >
+              <IconClose className="icon icon-sm" />
+            </button>
+          </div>
+
           <section className="panel-section">
             <h2 className="panel-title">
               <span className="panel-title-icon">
@@ -407,7 +455,7 @@ export default function App() {
             <ul className="book-list">
               {displayedRulebooks.map((book) => (
                 <li key={book.id} className={book.id === selectedId ? "active" : ""}>
-                  <button type="button" onClick={() => setSelectedId(book.id)}>
+                  <button type="button" onClick={() => selectRulebook(book.id)}>
                     <span className="book-icon">
                       <IconBook className="icon icon-sm" />
                     </span>
@@ -476,9 +524,30 @@ export default function App() {
               </div>
               <h3>The table awaits</h3>
               <p className="muted">Drop a rulebook PDF into your library — then roll for rulings on timing, edge cases, and disputes.</p>
+              <button
+                type="button"
+                className="open-library-btn"
+                onClick={() => setLibraryOpen(true)}
+              >
+                <IconLibrary className="icon icon-sm" />
+                Open library
+              </button>
             </div>
           ) : (
             <>
+              <div className="mobile-game-bar">
+                <button
+                  type="button"
+                  className="library-toggle"
+                  aria-expanded={libraryOpen}
+                  onClick={() => setLibraryOpen(true)}
+                >
+                  <IconMenu className="icon icon-sm" />
+                  Games
+                </button>
+                <span className="mobile-game-name">{selected.name}</span>
+              </div>
+
               <div className="chat-header">
                 <div className="chat-header-row">
                   <div>
@@ -584,94 +653,96 @@ export default function App() {
                 )}
               </div>
 
-              {clarification && (
-                <div className="clarification-prompt" role="status">
-                  <p className="clarification-prompt-label">Referee needs one detail</p>
-                  <p className="clarification-prompt-question">{clarification.question}</p>
-                  <button
-                    type="button"
-                    className="clarification-dismiss"
-                    onClick={() => setClarificationFor(selected.id, null)}
-                  >
-                    Ask something else instead
-                  </button>
-                </div>
-              )}
-
-              {chatMode === "ask" ? (
-                <form className="ask-form" onSubmit={handleAsk}>
-                  <input
-                    ref={inputRef}
-                    value={question}
-                    onChange={(e) => setQuestion(e.target.value)}
-                    placeholder={
-                      clarification
-                        ? "Your answer…"
-                        : messages.length > 0
-                          ? "Ask a follow-up…"
-                          : "Ask a rules question…"
-                    }
-                    disabled={loading}
-                  />
-                  <button type="submit" disabled={loading || !question.trim()}>
-                    {loading ? "Thinking…" : clarification ? "Send detail" : "Ask"}
-                  </button>
-                </form>
-              ) : (
-                <form className="dispute-form" onSubmit={handleDispute}>
-                  <label className="field-label" htmlFor="dispute-situation">
-                    What&apos;s in dispute?
-                  </label>
-                  <textarea
-                    id="dispute-situation"
-                    value={disputeSituation}
-                    onChange={(e) => setDisputeSituation(e.target.value)}
-                    placeholder="e.g. Can I play this card after combat ends?"
-                    rows={2}
-                    disabled={loading}
-                  />
-                  <div className="dispute-players">
-                    <div>
-                      <label className="field-label" htmlFor="dispute-player-a">
-                        Player A says
-                      </label>
-                      <textarea
-                        id="dispute-player-a"
-                        value={disputePlayerA}
-                        onChange={(e) => setDisputePlayerA(e.target.value)}
-                        placeholder="Their interpretation…"
-                        rows={2}
-                        disabled={loading}
-                      />
-                    </div>
-                    <div>
-                      <label className="field-label" htmlFor="dispute-player-b">
-                        Player B says
-                      </label>
-                      <textarea
-                        id="dispute-player-b"
-                        value={disputePlayerB}
-                        onChange={(e) => setDisputePlayerB(e.target.value)}
-                        placeholder="Their interpretation…"
-                        rows={2}
-                        disabled={loading}
-                      />
-                    </div>
+              <div className="chat-composer">
+                {clarification && (
+                  <div className="clarification-prompt" role="status">
+                    <p className="clarification-prompt-label">Referee needs one detail</p>
+                    <p className="clarification-prompt-question">{clarification.question}</p>
+                    <button
+                      type="button"
+                      className="clarification-dismiss"
+                      onClick={() => setClarificationFor(selected.id, null)}
+                    >
+                      Ask something else instead
+                    </button>
                   </div>
-                  <button
-                    type="submit"
-                    className="dispute-submit"
-                    disabled={
-                      loading
-                      || !disputeSituation.trim()
-                      || !disputePlayerA.trim()
-                      || !disputePlayerB.trim()
-                    }
-                  >
-                    {loading ? "Weighing arguments…" : "Settle dispute"}
-                  </button>
-                </form>
-              )}
+                )}
+
+                {chatMode === "ask" ? (
+                  <form className="ask-form" onSubmit={handleAsk}>
+                    <input
+                      ref={inputRef}
+                      value={question}
+                      onChange={(e) => setQuestion(e.target.value)}
+                      placeholder={
+                        clarification
+                          ? "Your answer…"
+                          : messages.length > 0
+                            ? "Ask a follow-up…"
+                            : "Ask a rules question…"
+                      }
+                      disabled={loading}
+                    />
+                    <button type="submit" disabled={loading || !question.trim()}>
+                      {loading ? "Thinking…" : clarification ? "Send detail" : "Ask"}
+                    </button>
+                  </form>
+                ) : (
+                  <form className="dispute-form" onSubmit={handleDispute}>
+                    <label className="field-label" htmlFor="dispute-situation">
+                      What&apos;s in dispute?
+                    </label>
+                    <textarea
+                      id="dispute-situation"
+                      value={disputeSituation}
+                      onChange={(e) => setDisputeSituation(e.target.value)}
+                      placeholder="e.g. Can I play this card after combat ends?"
+                      rows={2}
+                      disabled={loading}
+                    />
+                    <div className="dispute-players">
+                      <div>
+                        <label className="field-label" htmlFor="dispute-player-a">
+                          Player A says
+                        </label>
+                        <textarea
+                          id="dispute-player-a"
+                          value={disputePlayerA}
+                          onChange={(e) => setDisputePlayerA(e.target.value)}
+                          placeholder="Their interpretation…"
+                          rows={2}
+                          disabled={loading}
+                        />
+                      </div>
+                      <div>
+                        <label className="field-label" htmlFor="dispute-player-b">
+                          Player B says
+                        </label>
+                        <textarea
+                          id="dispute-player-b"
+                          value={disputePlayerB}
+                          onChange={(e) => setDisputePlayerB(e.target.value)}
+                          placeholder="Their interpretation…"
+                          rows={2}
+                          disabled={loading}
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="submit"
+                      className="dispute-submit"
+                      disabled={
+                        loading
+                        || !disputeSituation.trim()
+                        || !disputePlayerA.trim()
+                        || !disputePlayerB.trim()
+                      }
+                    >
+                      {loading ? "Weighing arguments…" : "Settle dispute"}
+                    </button>
+                  </form>
+                )}
+              </div>
             </>
           )}
         </main>
