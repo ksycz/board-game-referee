@@ -330,13 +330,19 @@ export default function App() {
 
   return (
     <div className="app">
+      <div className="table-rail table-rail-top" aria-hidden="true" />
       <header className="site-header">
         <div className="brand-mark" aria-hidden="true">
           <IconScales className="icon icon-lg" />
         </div>
         <div className="brand-copy">
+          <p className="brand-eyebrow">Game night edition</p>
           <h1>Rules Referee</h1>
-          <p>Your table-side rules lawyer — upload a rulebook, settle disputes with cited rulings.</p>
+          <p>Upload the rulebook, ask the hard questions, settle disputes — citations on the table.</p>
+        </div>
+        <div className="header-dice" aria-hidden="true">
+          <span className="die die-4" />
+          <span className="die die-20" />
         </div>
       </header>
 
@@ -464,13 +470,12 @@ export default function App() {
         <main className="chat panel">
           {!selected ? (
             <div className="empty-state">
-              <div className="empty-board" aria-hidden="true">
-                <span /><span /><span />
-                <span /><span /><span />
-                <span /><span /><span />
+              <div className="empty-dice" aria-hidden="true">
+                <span className="die die-6" />
+                <span className="die die-20" />
               </div>
-              <h3>Ready to play?</h3>
-              <p className="muted">Upload a rulebook PDF to ask timing questions, edge cases, and disputes.</p>
+              <h3>The table awaits</h3>
+              <p className="muted">Drop a rulebook PDF into your library — then roll for rulings on timing, edge cases, and disputes.</p>
             </div>
           ) : (
             <>
@@ -671,6 +676,7 @@ export default function App() {
           )}
         </main>
       </div>
+      <div className="table-rail table-rail-bottom" aria-hidden="true" />
     </div>
   );
 }
@@ -684,7 +690,7 @@ function RefereeAnswer({ rulebookId, data }: { rulebookId: string; data: AskResp
     <div className={`bubble referee${needsInput ? " needs-clarification" : ""}`}>
       <div className="referee-stamp" aria-hidden="true">
         <IconScales className="icon icon-xs" />
-        {isDispute ? "Dispute ruling" : "Official ruling"}
+        {isDispute ? "Dispute ruling" : "House ruling"}
       </div>
       {needsInput ? (
         <div className="clarification-callout">
