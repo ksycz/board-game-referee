@@ -22,13 +22,17 @@ import {
 import {
   IconBook,
   IconClose,
+  IconCopy,
   IconLibrary,
   IconMenu,
   IconPin,
   IconScales,
+  IconShare,
   IconThumbDown,
   IconThumbUp,
   IconUpload,
+  DieD20,
+  DieD6,
 } from "./Icons";
 
 type ChatMode = "ask" | "dispute";
@@ -358,18 +362,21 @@ export default function App() {
   return (
     <div className="app">
       <div className="table-rail table-rail-top" aria-hidden="true" />
-      <header className="site-header">
+      <header className="site-header panel">
         <div className="brand-mark" aria-hidden="true">
           <IconScales className="icon icon-lg" />
         </div>
         <div className="brand-copy">
-          <p className="brand-eyebrow">Game night edition</p>
-          <h1>Rules Referee</h1>
-          <p>Upload the rulebook, ask the hard questions, settle disputes — citations on the table.</p>
+          <p className="brand-eyebrow">Tableside rules engine</p>
+          <h1>
+            <span className="brand-title-main">Rules</span>
+            <span className="brand-title-accent">Referee</span>
+          </h1>
+          <p>Settle arguments with cited rulings — upload a rulebook and roll.</p>
         </div>
         <div className="header-dice" aria-hidden="true">
-          <span className="die die-4" />
-          <span className="die die-20" />
+          <DieD6 className="die-svg die-svg-sm" pip="six" />
+          <DieD20 className="die-svg die-svg-lg" value={20} />
         </div>
       </header>
 
@@ -519,8 +526,8 @@ export default function App() {
           {!selected ? (
             <div className="empty-state">
               <div className="empty-dice" aria-hidden="true">
-                <span className="die die-6" />
-                <span className="die die-20" />
+                <DieD6 className="die-svg die-svg-xl" pip="six" />
+                <DieD20 className="die-svg die-svg-lg" value={20} />
               </div>
               <h3>The table awaits</h3>
               <p className="muted">Drop a rulebook PDF into your library — then roll for rulings on timing, edge cases, and disputes.</p>
@@ -809,13 +816,74 @@ function RefereeAnswer({ rulebookId, data }: { rulebookId: string; data: AskResp
       )}
 
       {!needsInput && (
-        <RulingFeedback rulebookId={rulebookId} data={data} />
+        <div className="ruling-actions">
+          <CopyShareRuling data={data} />
+          <RulingFeedback rulebookId={rulebookId} data={data} />
+        </div>
       )}
 
       <details>
         <summary>Agent trace ({data.retrieval.chunks_found} passages from pages {data.retrieval.pages.join(", ")})</summary>
         <pre>{JSON.stringify(data, null, 2)}</pre>
       </details>
+    </div>
+  );
+}
+
+function CopyShareRuling({ data }: { data: AskResponse }) {
+  const [status, setStatus] = useState<"idle" | "copied" | "shared">("idle");
+  const shareText = formatRulingShareText(data);
+  const canNativeShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
+
+  async function copyRuling() {
+    try {
+      await navigator.clipboard.writeText(shareText);
+      setStatus("copied");
+      window.setTimeout(() => setStatus("idle"), 2000);
+    } catch {
+      // Clipboard may be blocked without a secure context or permission.
+    }
+  }
+
+  async function shareRuling() {
+    if (!canNativeShare) {
+      return;
+    }
+    try {
+      await navigator.share({
+        title: `Rules Referee — ${data.rulebook_name}`,
+        text: shareText,
+      });
+      setStatus("shared");
+      window.setTimeout(() => setStatus("idle"), 2000);
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        return;
+      }
+      await copyRuling();
+    }
+  }
+
+  return (
+    <div className="ruling-share">
+      <button
+        type="button"
+        className="ruling-share-btn"
+        onClick={() => void copyRuling()}
+      >
+        <IconCopy className="icon icon-sm" />
+        {status === "copied" ? "Copied!" : "Copy ruling"}
+      </button>
+      {canNativeShare && (
+        <button
+          type="button"
+          className="ruling-share-btn"
+          onClick={() => void shareRuling()}
+        >
+          <IconShare className="icon icon-sm" />
+          {status === "shared" ? "Shared!" : "Share"}
+        </button>
+      )}
     </div>
   );
 }
@@ -975,6 +1043,62 @@ function SourcePanel({
   );
 }
 
+function favorsLabel(favors: NonNullable<AskResponse["ruling"]["favors"]>): string {
+  switch (favors) {
+    case "player_a":
+      return "Favors Player A";
+    case "player_b":
+      return "Favors Player B";
+    case "split":
+      return "Split — both partly right";
+    case "neither":
+      return "Neither player";
+    case "unclear":
+      return "Unclear from rules";
+    default:
+      return favors;
+  }
+}
+
+function formatRulingShareText(data: AskResponse): string {
+  const { ruling, rulebook_name, mode } = data;
+  const lines: string[] = [`Rules Referee — ${rulebook_name}`, ""];
+
+  if (mode === "ask" && data.question) {
+    lines.push(`Question: ${data.question}`, "");
+  }
+
+  if (mode === "dispute") {
+    if (data.situation) {
+      lines.push(`Dispute: ${data.situation}`);
+    }
+    if (data.player_a) {
+      lines.push(`Player A: ${data.player_a}`);
+    }
+    if (data.player_b) {
+      lines.push(`Player B: ${data.player_b}`);
+    }
+    if (data.situation || data.player_a || data.player_b) {
+      lines.push("");
+    }
+    if (ruling.favors) {
+      lines.push(`Outcome: ${favorsLabel(ruling.favors)}`, "");
+    }
+  }
+
+  lines.push(`Ruling: ${ruling.ruling}`, "", `Reasoning: ${ruling.reasoning}`);
+
+  if (ruling.citations.length > 0) {
+    lines.push("", "Citations:");
+    for (const citation of ruling.citations) {
+      const section = citation.section ? ` (${citation.section})` : "";
+      lines.push(`• p.${citation.page}${section}: "${citation.quote}"`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
 function highlightQuoteInExcerpt(excerpt: string, quote: string): ReactNode {
   const trimmed = quote.trim();
   if (!trimmed) {
@@ -995,21 +1119,4 @@ function highlightQuoteInExcerpt(excerpt: string, quote: string): ReactNode {
       {excerpt.slice(index + trimmed.length)}
     </>
   );
-}
-
-function favorsLabel(favors: NonNullable<AskResponse["ruling"]["favors"]>): string {
-  switch (favors) {
-    case "player_a":
-      return "Favors Player A";
-    case "player_b":
-      return "Favors Player B";
-    case "split":
-      return "Split — both partly right";
-    case "neither":
-      return "Neither player";
-    case "unclear":
-      return "Unclear from rules";
-    default:
-      return favors;
-  }
 }
