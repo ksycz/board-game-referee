@@ -10,7 +10,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -185,6 +185,21 @@ def clear_faq_cache(rulebook_id: str):
     except KeyError:
         raise HTTPException(status_code=404, detail="Rulebook not found")
     return {"cleared": cleared}
+
+
+@app.get("/api/rulebooks/{rulebook_id}/pages/{page}/preview")
+def rulebook_page_preview(rulebook_id: str, page: int):
+    if page < 1:
+        raise HTTPException(status_code=400, detail="Page number must be at least 1")
+    try:
+        png_bytes = pipeline.render_page_preview(rulebook_id, page)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Rulebook not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(content=png_bytes, media_type="image/png")
 
 
 @app.post("/api/rulebooks/{rulebook_id}/ask")

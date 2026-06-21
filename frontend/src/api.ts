@@ -387,6 +387,10 @@ export async function pinRulebook(rulebookId: string, pinned: boolean): Promise<
   return res.json();
 }
 
+export function rulebookPagePreviewUrl(rulebookId: string, page: number): string {
+  return `${API}/api/rulebooks/${rulebookId}/pages/${page}/preview`;
+}
+
 export async function clearFaqCache(rulebookId: string): Promise<number> {
   const res = await fetch(`${API}/api/rulebooks/${rulebookId}/faq-cache`, {
     method: "DELETE",

@@ -16,6 +16,7 @@ import {
   listRulebooks,
   pinRulebook,
   submitRulingFeedback,
+  rulebookPagePreviewUrl,
   uploadProgressPercent,
   uploadRulebook,
   type UploadProgress,
@@ -64,6 +65,23 @@ function buildHistory(messages: Message[]): HistoryMessage[] {
 }
 
 const RULEBOOKS_PREVIEW_LIMIT = 5;
+const TABLE_MODE_STORAGE_KEY = "rules-referee-table-mode";
+
+function readTableModePreference(): boolean {
+  try {
+    return localStorage.getItem(TABLE_MODE_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeTableModePreference(enabled: boolean): void {
+  try {
+    localStorage.setItem(TABLE_MODE_STORAGE_KEY, enabled ? "1" : "0");
+  } catch {
+    // Storage may be blocked in private browsing.
+  }
+}
 
 function sortRulebooks(books: Rulebook[]): Rulebook[] {
   return [...books].sort((left, right) => {
@@ -116,6 +134,7 @@ export default function App() {
   const [info, setInfo] = useState<string | null>(null);
   const [showAllRulebooks, setShowAllRulebooks] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [tableMode, setTableMode] = useState(readTableModePreference);
   const inputRef = useRef<HTMLInputElement>(null);
 
   function selectRulebook(id: string) {
@@ -165,6 +184,10 @@ export default function App() {
       inputRef.current?.focus();
     }
   }, [clarification]);
+
+  useEffect(() => {
+    writeTableModePreference(tableMode);
+  }, [tableMode]);
 
   useEffect(() => {
     if (!libraryOpen) {
@@ -377,7 +400,7 @@ export default function App() {
   }
 
   return (
-    <div className="app">
+    <div className={`app${tableMode ? " table-mode" : ""}`}>
       <div className="table-rail table-rail-top" aria-hidden="true" />
       <header className="site-header panel">
         <div className="brand-mark" aria-hidden="true">
@@ -539,7 +562,7 @@ export default function App() {
           </section>
         </aside>
 
-        <main className="chat panel">
+        <main className={`chat panel${tableMode ? " table-mode" : ""}`}>
           {!selected ? (
             <div className="empty-state">
               <div className="empty-dice" aria-hidden="true">
@@ -603,6 +626,15 @@ export default function App() {
                         Dispute
                       </button>
                     </div>
+                    <button
+                      type="button"
+                      className={`table-mode-toggle${tableMode ? " active" : ""}`}
+                      aria-pressed={tableMode}
+                      title="Bigger rulings, high contrast, hide agent trace"
+                      onClick={() => setTableMode((current) => !current)}
+                    >
+                      {tableMode ? "Table mode on" : "Table mode"}
+                    </button>
                     {messages.length > 0 && (
                       <button
                         type="button"
@@ -681,7 +713,7 @@ export default function App() {
                   ) : (
                     <div key={i} className="message-wrap referee">
                       <span className="message-label">Referee</span>
-                      <RefereeAnswer rulebookId={selected.id} data={msg.data} />
+                      <RefereeAnswer rulebookId={selected.id} data={msg.data} tableMode={tableMode} />
                     </div>
                   )
                 )}
@@ -786,13 +818,29 @@ export default function App() {
   );
 }
 
-function RefereeAnswer({ rulebookId, data }: { rulebookId: string; data: AskResponse }) {
+function RefereeAnswer({
+  rulebookId,
+  data,
+  tableMode,
+}: {
+  rulebookId: string;
+  data: AskResponse;
+  tableMode: boolean;
+}) {
   const { ruling, citation_check } = data;
   const needsInput = ruling.needs_clarification && ruling.clarification_question;
   const isDispute = data.mode === "dispute";
+  const [traceOpen, setTraceOpen] = useState(false);
+
+  const trace = (
+    <details open={tableMode ? traceOpen : undefined}>
+      <summary>Agent trace ({data.retrieval.chunks_found} passages from pages {data.retrieval.pages.join(", ")})</summary>
+      <pre>{JSON.stringify(data, null, 2)}</pre>
+    </details>
+  );
 
   return (
-    <div className={`bubble referee${needsInput ? " needs-clarification" : ""}`}>
+    <div className={`bubble referee${needsInput ? " needs-clarification" : ""}${tableMode ? " table-mode-ruling" : ""}`}>
       <div className="referee-stamp" aria-hidden="true">
         <IconScales className="icon icon-xs" />
         {isDispute ? "Dispute ruling" : "House ruling"}
@@ -819,7 +867,14 @@ function RefereeAnswer({ rulebookId, data }: { rulebookId: string; data: AskResp
       )}
 
       <p className={`ruling${needsInput ? " tentative" : ""}`}>{ruling.ruling}</p>
-      <p className="reasoning">{ruling.reasoning}</p>
+      {tableMode ? (
+        <details className="table-mode-reasoning">
+          <summary>Reasoning</summary>
+          <p className="reasoning">{ruling.reasoning}</p>
+        </details>
+      ) : (
+        <p className="reasoning">{ruling.reasoning}</p>
+      )}
 
       {isDispute && (ruling.player_a_assessment || ruling.player_b_assessment) && (
         <div className="dispute-assessments">
@@ -839,7 +894,7 @@ function RefereeAnswer({ rulebookId, data }: { rulebookId: string; data: AskResp
       )}
 
       {ruling.citations.length > 0 && (
-        <CitationsList data={data} />
+        <CitationsList rulebookId={rulebookId} data={data} tableMode={tableMode} />
       )}
 
       {!needsInput && (
@@ -849,10 +904,30 @@ function RefereeAnswer({ rulebookId, data }: { rulebookId: string; data: AskResp
         </div>
       )}
 
-      <details>
-        <summary>Agent trace ({data.retrieval.chunks_found} passages from pages {data.retrieval.pages.join(", ")})</summary>
-        <pre>{JSON.stringify(data, null, 2)}</pre>
-      </details>
+      {tableMode ? (
+        traceOpen ? (
+          <div className="agent-trace-wrap">
+            <button
+              type="button"
+              className="agent-trace-toggle"
+              onClick={() => setTraceOpen(false)}
+            >
+              Hide trace
+            </button>
+            {trace}
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="agent-trace-toggle"
+            onClick={() => setTraceOpen(true)}
+          >
+            Show agent trace
+          </button>
+        )
+      ) : (
+        trace
+      )}
     </div>
   );
 }
@@ -981,17 +1056,26 @@ function RulingFeedback({ rulebookId, data }: { rulebookId: string; data: AskRes
   );
 }
 
-function CitationsList({ data }: { data: AskResponse }) {
+function CitationsList({
+  rulebookId,
+  data,
+  tableMode,
+}: {
+  rulebookId: string;
+  data: AskResponse;
+  tableMode: boolean;
+}) {
   const { ruling, citation_check } = data;
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
   const selected = selectedIndex !== null ? citation_check.citations[selectedIndex] : null;
   const selectedRuling = selectedIndex !== null ? ruling.citations[selectedIndex] : null;
 
-  return (
-    <div className="citations">
-      <h4>Citations</h4>
-      <p className="citations-hint">Tap a citation to view the rulebook excerpt.</p>
+  const list = (
+    <>
+      <p className="citations-hint">
+        {tableMode ? "Tap a citation for the PDF page." : "Tap a citation to view the PDF page and excerpt."}
+      </p>
       <ul className="citation-list">
         {ruling.citations.map((citation, index) => {
           const checked = citation_check.citations[index];
@@ -1017,32 +1101,58 @@ function CitationsList({ data }: { data: AskResponse }) {
       </ul>
       {selected && selectedRuling && (
         <SourcePanel
+          rulebookId={rulebookId}
           citation={selected}
           quote={selectedRuling.quote}
           sources={data.retrieval.sources ?? []}
           onClose={() => setSelectedIndex(null)}
         />
       )}
+    </>
+  );
+
+  return (
+    <div className="citations">
+      {tableMode ? (
+        <details className="table-mode-citations">
+          <summary>Citations ({ruling.citations.length})</summary>
+          {list}
+        </details>
+      ) : (
+        <>
+          <h4>Citations</h4>
+          {list}
+        </>
+      )}
     </div>
   );
 }
 
 function SourcePanel({
+  rulebookId,
   citation,
   quote,
   sources,
   onClose,
 }: {
+  rulebookId: string;
   citation: Citation;
   quote: string;
   sources: SourceExcerpt[];
   onClose: () => void;
 }) {
+  const [previewFailed, setPreviewFailed] = useState(false);
+
+  useEffect(() => {
+    setPreviewFailed(false);
+  }, [rulebookId, citation.page]);
+
   const excerpt =
     citation.source_excerpt
     ?? sources.find((source) => source.page === citation.page)?.text
     ?? null;
   const section = citation.source_section ?? citation.section ?? sources.find((s) => s.page === citation.page)?.section;
+  const previewUrl = rulebookPagePreviewUrl(rulebookId, citation.page);
 
   return (
     <div className="source-panel" role="region" aria-label="Source excerpt">
@@ -1058,14 +1168,26 @@ function SourcePanel({
           Close
         </button>
       </div>
-      {excerpt ? (
-        <div className="source-panel-body">{highlightQuoteInExcerpt(excerpt, quote)}</div>
-      ) : (
-        <p className="source-panel-missing">
-          This passage was not in the retrieved context for this question.
-          {citation.issue ? ` (${citation.issue.replace(/_/g, " ")})` : ""}
-        </p>
-      )}
+      <div className="source-panel-content">
+        {!previewFailed && (
+          <figure className="source-panel-preview">
+            <img
+              src={previewUrl}
+              alt={`Rulebook page ${citation.page}`}
+              loading="lazy"
+              onError={() => setPreviewFailed(true)}
+            />
+          </figure>
+        )}
+        {excerpt ? (
+          <div className="source-panel-body">{highlightQuoteInExcerpt(excerpt, quote)}</div>
+        ) : (
+          <p className="source-panel-missing">
+            This passage was not in the retrieved context for this question.
+            {citation.issue ? ` (${citation.issue.replace(/_/g, " ")})` : ""}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

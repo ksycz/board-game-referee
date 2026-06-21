@@ -302,6 +302,42 @@ def test_clear_faq_cache_unknown_book_returns_404(client):
     assert res.json()["detail"] == "Rulebook not found"
 
 
+def test_rulebook_page_preview(client, sample_pdf):
+    with sample_pdf.open("rb") as f:
+        upload = client.post(
+            "/api/rulebooks",
+            files={"file": ("sample-rulebook.pdf", f, "application/pdf")},
+            data={"name": "Test Game"},
+        )
+    book_id = upload.json()["rulebook"]["id"]
+
+    res = client.get(f"/api/rulebooks/{book_id}/pages/1/preview")
+    assert res.status_code == 200
+    assert res.headers["content-type"] == "image/png"
+    assert res.content.startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_rulebook_page_preview_unknown_book_returns_404(client):
+    res = client.get("/api/rulebooks/does-not-exist/pages/1/preview")
+    assert res.status_code == 404
+
+
+def test_rulebook_page_preview_invalid_page_returns_400(client, sample_pdf):
+    with sample_pdf.open("rb") as f:
+        upload = client.post(
+            "/api/rulebooks",
+            files={"file": ("sample-rulebook.pdf", f, "application/pdf")},
+            data={"name": "Test Game"},
+        )
+    book_id = upload.json()["rulebook"]["id"]
+
+    res = client.get(f"/api/rulebooks/{book_id}/pages/0/preview")
+    assert res.status_code == 400
+
+    res = client.get(f"/api/rulebooks/{book_id}/pages/999/preview")
+    assert res.status_code == 400
+
+
 def test_ask_rejects_invalid_history_role(client, sample_pdf):
     with sample_pdf.open("rb") as f:
         upload = client.post(
