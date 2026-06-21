@@ -62,6 +62,11 @@ export type RetrievalMetrics = {
   all_citations_valid: boolean;
 };
 
+export type ConfidenceHint = {
+  level: "caution" | "low";
+  messages: string[];
+};
+
 export type AskResponse = {
   response_id?: string;
   mode: "ask" | "dispute";
@@ -95,6 +100,7 @@ export type AskResponse = {
     issues: string[];
     citations: Citation[];
   };
+  confidence_hint?: ConfidenceHint;
 };
 
 export type UploadProgress = {

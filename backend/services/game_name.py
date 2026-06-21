@@ -7,7 +7,9 @@ from pathlib import Path
 
 import fitz
 
-_LANGUAGE_SUFFIX_RE = re.compile(r"_(?:ENG?|DE|FR|ES|PL|IT|NL|CS|HU|PT)(?:_[vV]\d+)?$", re.IGNORECASE)
+_LANGUAGE_SUFFIX_RE = re.compile(
+    r"_(?:ENG?|DE|FR|ES|PL|IT|NL|CS|HU|PT)(?:_[vV]\d+)?$", re.IGNORECASE
+)
 _VERSION_SUFFIX_RE = re.compile(r"[_\s-]+v\d+$", re.IGNORECASE)
 
 _TITLE_PATTERNS = [
@@ -52,7 +54,11 @@ def extract_game_name_from_pdf(pdf_path: Path, *, max_pages: int = 5) -> str | N
     doc = fitz.open(pdf_path)
     try:
         metadata_title = (doc.metadata or {}).get("title", "").strip()
-        if metadata_title and len(metadata_title) >= 3 and not metadata_title.lower().endswith(".pdf"):
+        if (
+            metadata_title
+            and len(metadata_title) >= 3
+            and not metadata_title.lower().endswith(".pdf")
+        ):
             return _normalize_title(metadata_title)
 
         text = "\n".join(doc[i].get_text("text") for i in range(min(max_pages, len(doc))))

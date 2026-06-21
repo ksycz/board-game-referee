@@ -92,9 +92,7 @@ def _format_context(chunks: list[StoredChunk]) -> str:
     blocks: list[str] = []
     for chunk in chunks:
         section = f" — {chunk.section_hint}" if chunk.section_hint else ""
-        blocks.append(
-            f"[Page {chunk.page}{section}]\n{chunk.text}"
-        )
+        blocks.append(f"[Page {chunk.page}{section}]\n{chunk.text}")
     return "\n\n---\n\n".join(blocks)
 
 
@@ -150,9 +148,7 @@ class RefereeAgent:
         except anthropic.AuthenticationError as exc:
             raise ValueError("Invalid ANTHROPIC_API_KEY") from exc
         except anthropic.NotFoundError as exc:
-            raise ValueError(
-                f"Model '{MODEL}' not found. Update ANTHROPIC_MODEL in .env."
-            ) from exc
+            raise ValueError(f"Model '{MODEL}' not found. Update ANTHROPIC_MODEL in .env.") from exc
         except anthropic.RateLimitError as exc:
             raise ValueError("Anthropic rate limit exceeded. Try again shortly.") from exc
         except anthropic.APIConnectionError as exc:
@@ -212,9 +208,7 @@ class RefereeAgent:
         except anthropic.AuthenticationError as exc:
             raise ValueError("Invalid ANTHROPIC_API_KEY") from exc
         except anthropic.NotFoundError as exc:
-            raise ValueError(
-                f"Model '{MODEL}' not found. Update ANTHROPIC_MODEL in .env."
-            ) from exc
+            raise ValueError(f"Model '{MODEL}' not found. Update ANTHROPIC_MODEL in .env.") from exc
         except anthropic.RateLimitError as exc:
             raise ValueError("Anthropic rate limit exceeded. Try again shortly.") from exc
         except anthropic.APIConnectionError as exc:

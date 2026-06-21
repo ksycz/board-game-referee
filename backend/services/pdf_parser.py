@@ -337,9 +337,7 @@ def chunk_page_text(
         if len(paragraph) > max_chars:
             flush()
             for piece in _split_by_sentences(paragraph, max_chars):
-                chunks.append(
-                    TextChunk(page=page, text=piece, section_hint=current_section)
-                )
+                chunks.append(TextChunk(page=page, text=piece, section_hint=current_section))
             continue
 
         extra = len(paragraph) + (2 if current_parts else 0)

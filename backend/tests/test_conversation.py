@@ -1,6 +1,11 @@
 """Tests for conversation helpers."""
 
-from services.conversation import dispute_retrieval_query, format_history_block, retrieval_query, trim_history
+from services.conversation import (
+    dispute_retrieval_query,
+    format_history_block,
+    retrieval_query,
+    trim_history,
+)
 
 
 def test_retrieval_query_includes_recent_user_messages():

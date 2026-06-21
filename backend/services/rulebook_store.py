@@ -6,11 +6,15 @@ import hashlib
 import json
 import uuid
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from config import RULEBOOKS_DIR, ensure_dirs
-from services.game_name import extract_game_name_from_pdf, looks_like_filename, prettify_filename_stem
+from services.game_name import (
+    extract_game_name_from_pdf,
+    looks_like_filename,
+    prettify_filename_stem,
+)
 
 
 def pdf_content_hash(pdf_bytes: bytes) -> str:
@@ -18,7 +22,7 @@ def pdf_content_hash(pdf_bytes: bytes) -> str:
 
 
 class DuplicateRulebookError(Exception):
-    def __init__(self, existing: "Rulebook") -> None:
+    def __init__(self, existing: Rulebook) -> None:
         self.existing = existing
         super().__init__(f'Rulebook "{existing.name}" is already in your library.')
 
@@ -122,7 +126,7 @@ class RulebookStore:
             name=name,
             filename=filename,
             page_count=page_count,
-            created_at=datetime.now(timezone.utc).isoformat(),
+            created_at=datetime.now(UTC).isoformat(),
             content_hash=content_hash,
         )
         self._rulebooks[book.id] = book

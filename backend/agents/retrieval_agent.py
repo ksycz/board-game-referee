@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from services.vector_store import StoredChunk, VectorStore
+from services.vector_store import VectorStore
 
 
 class RetrievalAgent:

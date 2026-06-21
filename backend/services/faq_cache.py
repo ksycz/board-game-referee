@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -21,9 +21,7 @@ def ask_lookup_key(question: str) -> str:
 
 
 def dispute_lookup_key(situation: str, player_a: str, player_b: str) -> str:
-    payload = "|".join(
-        normalize_text(value) for value in (situation, player_a, player_b)
-    )
+    payload = "|".join(normalize_text(value) for value in (situation, player_a, player_b))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -110,7 +108,7 @@ class FaqCache:
         book["entries"][lookup_key] = {
             "mode": mode,
             "label": label,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
             "response": stored,
         }
         self._evict_if_needed(book)

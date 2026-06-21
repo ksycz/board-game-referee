@@ -105,7 +105,9 @@ def _term_matches(term: str, lowered: str) -> bool:
     return term in lowered
 
 
-def _keyword_score(text: str, terms: list[str], term_doc_freq: dict[str, int] | None = None) -> float:
+def _keyword_score(
+    text: str, terms: list[str], term_doc_freq: dict[str, int] | None = None
+) -> float:
     if not terms:
         return 0.0
     lowered = text.lower()
@@ -134,7 +136,7 @@ class SimpleEmbeddingFunction(EmbeddingFunction):
         return {"dim": _DIM}
 
     @staticmethod
-    def build_from_config(config: dict) -> "SimpleEmbeddingFunction":
+    def build_from_config(config: dict) -> SimpleEmbeddingFunction:
         return SimpleEmbeddingFunction()
 
     def __call__(self, input: Documents) -> Embeddings:
@@ -217,7 +219,9 @@ class VectorStore:
         metadatas = result.get("metadatas", [[]])[0]
         distances = result.get("distances", [[]])[0]
 
-        for chunk_id, text, metadata, distance in zip(ids, documents, metadatas, distances):
+        for chunk_id, text, metadata, distance in zip(
+            ids, documents, metadatas, distances, strict=False
+        ):
             vector_score = 1.0 - float(distance)
             merged[chunk_id] = StoredChunk(
                 chunk_id=chunk_id,
@@ -237,14 +241,16 @@ class VectorStore:
             for term in terms:
                 term_doc_freq[term] = sum(
                     1
-                    for text, metadata in zip(all_documents, all_metadatas)
+                    for text, metadata in zip(all_documents, all_metadatas, strict=False)
                     if _term_matches(
                         term,
                         _searchable_text(text, metadata.get("section_hint") or None).lower(),
                     )
                 )
 
-            for chunk_id, text, metadata in zip(all_ids, all_documents, all_metadatas):
+            for chunk_id, text, metadata in zip(
+                all_ids, all_documents, all_metadatas, strict=False
+            ):
                 section_hint = metadata.get("section_hint") or None
                 searchable = _searchable_text(text, section_hint)
                 keyword_score = _keyword_score(searchable, terms, term_doc_freq)
@@ -307,7 +313,7 @@ class VectorStore:
         documents = result.get("documents") or []
         metadatas = result.get("metadatas") or []
 
-        for chunk_id, text, metadata in zip(ids, documents, metadatas):
+        for chunk_id, text, metadata in zip(ids, documents, metadatas, strict=False):
             chunks.append(
                 StoredChunk(
                     chunk_id=chunk_id,

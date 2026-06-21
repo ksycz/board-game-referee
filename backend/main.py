@@ -3,10 +3,8 @@ from __future__ import annotations
 import re
 import uuid
 from dataclasses import asdict
-
-from typing import Literal, Optional
-
 from pathlib import Path
+from typing import Literal
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -43,7 +41,7 @@ class HistoryMessage(BaseModel):
 class AskRequest(BaseModel):
     question: str = Field(min_length=3, max_length=2000)
     history: list[HistoryMessage] = Field(default_factory=list, max_length=20)
-    top_k: Optional[int] = Field(default=None, ge=1, le=20)
+    top_k: int | None = Field(default=None, ge=1, le=20)
 
 
 class DisputeRequest(BaseModel):
@@ -51,7 +49,7 @@ class DisputeRequest(BaseModel):
     player_a: str = Field(min_length=3, max_length=2000)
     player_b: str = Field(min_length=3, max_length=2000)
     history: list[HistoryMessage] = Field(default_factory=list, max_length=20)
-    top_k: Optional[int] = Field(default=None, ge=1, le=20)
+    top_k: int | None = Field(default=None, ge=1, le=20)
 
 
 class PinRequest(BaseModel):
@@ -63,8 +61,8 @@ class RulingFeedbackRequest(BaseModel):
     helpful: bool
     mode: Literal["ask", "dispute"] = "ask"
     cached: bool = False
-    confidence: Optional[Literal["high", "medium", "low"]] = None
-    question: Optional[str] = Field(default=None, max_length=2000)
+    confidence: Literal["high", "medium", "low"] | None = None
+    question: str | None = Field(default=None, max_length=2000)
     retrieved_pages: list[int] = Field(default_factory=list, max_length=50)
 
 
@@ -86,7 +84,7 @@ async def _read_upload_pdf(file: UploadFile) -> tuple[bytes, str]:
 @app.post("/api/rulebooks/upload-stream")
 async def upload_rulebook_stream(
     file: UploadFile = File(...),
-    name: Optional[str] = Form(default=None),
+    name: str | None = Form(default=None),
 ):
     content, original_filename = await _read_upload_pdf(file)
     display_name = (name or "").strip() or None
@@ -122,7 +120,7 @@ def list_rulebooks():
 @app.post("/api/rulebooks")
 async def upload_rulebook(
     file: UploadFile = File(...),
-    name: Optional[str] = Form(default=None),
+    name: str | None = Form(default=None),
 ):
     content, original_filename = await _read_upload_pdf(file)
     display_name = (name or "").strip() or None

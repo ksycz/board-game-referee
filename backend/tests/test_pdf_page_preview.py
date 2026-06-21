@@ -1,6 +1,7 @@
 """Tests for PDF page preview rendering."""
 
 import fitz
+import pytest
 
 from services.pdf_page_preview import render_page_png
 
@@ -17,8 +18,5 @@ def test_render_page_png_rejects_out_of_range_page(sample_pdf):
     page_count = len(doc)
     doc.close()
 
-    try:
+    with pytest.raises(ValueError, match="out of range"):
         render_page_png(sample_pdf, page_count + 1)
-        assert False, "expected ValueError"
-    except ValueError as exc:
-        assert "out of range" in str(exc)

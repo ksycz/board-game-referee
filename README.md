@@ -141,6 +141,21 @@ source .venv/bin/activate
 pytest
 ```
 
+## Pre-commit
+
+Git hooks run **Ruff** (lint + format) on the backend and **ESLint** on the frontend before each commit:
+
+```bash
+pip install -r backend/requirements-dev.txt
+pre-commit install
+```
+
+Run all hooks manually:
+
+```bash
+pre-commit run --all-files
+```
+
 ### Tune retrieval
 
 Each ask/dispute logs retrieval metrics to `data/retrieval_telemetry.jsonl` (retrieved vs cited pages, citation pass rate). Summarize live usage:

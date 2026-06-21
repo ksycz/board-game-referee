@@ -380,7 +380,10 @@ def test_rulebook_examples_unknown_book_returns_404(client):
 
 def test_ruling_feedback(client, sample_pdf, tmp_path, monkeypatch):
     monkeypatch.setattr("config.RULING_FEEDBACK_LOG_PATH", tmp_path / "feedback.jsonl")
-    monkeypatch.setattr("services.retrieval_telemetry.RULING_FEEDBACK_LOG_PATH", tmp_path / "feedback.jsonl")
+    monkeypatch.setattr(
+        "services.retrieval_telemetry.RULING_FEEDBACK_LOG_PATH",
+        tmp_path / "feedback.jsonl",
+    )
 
     with sample_pdf.open("rb") as f:
         upload = client.post(

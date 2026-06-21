@@ -100,6 +100,8 @@ def suggest_questions(chunks: list[StoredChunk], *, limit: int = 3) -> list[str]
     return suggestions[:limit]
 
 
-def example_questions_for_rulebook(vector_store: VectorStore, rulebook_id: str, *, limit: int = 3) -> list[str]:
+def example_questions_for_rulebook(
+    vector_store: VectorStore, rulebook_id: str, *, limit: int = 3
+) -> list[str]:
     chunks = vector_store.list_chunks(rulebook_id)
     return suggest_questions(chunks, limit=limit)

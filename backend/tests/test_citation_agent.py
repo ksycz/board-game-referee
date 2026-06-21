@@ -6,7 +6,12 @@ from services.vector_store import StoredChunk
 
 def test_citation_valid_when_page_and_quote_match():
     chunks = [
-        StoredChunk(chunk_id="1", page=5, text="You may not attack on the first turn.", section_hint=None),
+        StoredChunk(
+            chunk_id="1",
+            page=5,
+            text="You may not attack on the first turn.",
+            section_hint=None,
+        ),
     ]
     ruling = {
         "citations": [{"page": 5, "quote": "may not attack on the first turn"}],
@@ -36,7 +41,12 @@ def test_citation_includes_source_excerpt_for_page_without_exact_quote():
 
 def test_citation_invalid_when_page_not_retrieved():
     chunks = [
-        StoredChunk(chunk_id="1", page=3, text="Setup: each player draws 5 cards.", section_hint=None),
+        StoredChunk(
+            chunk_id="1",
+            page=3,
+            text="Setup: each player draws 5 cards.",
+            section_hint=None,
+        ),
     ]
     ruling = {
         "citations": [{"page": 99, "quote": "something"}],

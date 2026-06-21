@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import type { ConfidenceHint as ConfidenceHintInfo } from "./api";
 import {
   AskResponse,
   Citation,
@@ -25,16 +26,16 @@ import {
   IconBook,
   IconClose,
   IconCopy,
+  IconDice,
   IconLibrary,
   IconMenu,
+  IconMore,
   IconPin,
   IconScales,
   IconShare,
   IconThumbDown,
   IconThumbUp,
   IconUpload,
-  DieD20,
-  DieD6,
 } from "./Icons";
 
 type ChatMode = "ask" | "dispute";
@@ -65,23 +66,6 @@ function buildHistory(messages: Message[]): HistoryMessage[] {
 }
 
 const RULEBOOKS_PREVIEW_LIMIT = 5;
-const TABLE_MODE_STORAGE_KEY = "rules-referee-table-mode";
-
-function readTableModePreference(): boolean {
-  try {
-    return localStorage.getItem(TABLE_MODE_STORAGE_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function writeTableModePreference(enabled: boolean): void {
-  try {
-    localStorage.setItem(TABLE_MODE_STORAGE_KEY, enabled ? "1" : "0");
-  } catch {
-    // Storage may be blocked in private browsing.
-  }
-}
 
 function sortRulebooks(books: Rulebook[]): Rulebook[] {
   return [...books].sort((left, right) => {
@@ -134,8 +118,8 @@ export default function App() {
   const [info, setInfo] = useState<string | null>(null);
   const [showAllRulebooks, setShowAllRulebooks] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
-  const [tableMode, setTableMode] = useState(readTableModePreference);
   const inputRef = useRef<HTMLInputElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   function selectRulebook(id: string) {
     setSelectedId(id);
@@ -186,19 +170,34 @@ export default function App() {
   }, [clarification]);
 
   useEffect(() => {
-    writeTableModePreference(tableMode);
-  }, [tableMode]);
-
-  useEffect(() => {
     if (!libraryOpen) {
       return;
     }
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setLibraryOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
     };
   }, [libraryOpen]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages.length, loading, selectedId]);
+
+  useEffect(() => {
+    if (!info) {
+      return;
+    }
+    const timer = window.setTimeout(() => setInfo(null), 8000);
+    return () => window.clearTimeout(timer);
+  }, [info]);
 
   useEffect(() => {
     if (!selectedId || examples[selectedId]) {
@@ -269,23 +268,22 @@ export default function App() {
     }
   }
 
-  async function handleAsk(e: React.FormEvent) {
-    e.preventDefault();
-    if (!selectedId || !question.trim()) return;
+  async function submitQuestion(reply: string) {
+    if (!selectedId || !reply.trim()) {
+      return;
+    }
 
-    const reply = question.trim();
-    setQuestion("");
-
+    const trimmed = reply.trim();
     const history = buildHistory(messages);
-    updateThread(selectedId, (current) => [...current, { role: "user", text: reply }]);
+    updateThread(selectedId, (current) => [...current, { role: "user", text: trimmed }]);
 
     setLoading(true);
     setError(null);
     try {
-      const answer = await askRulebook(selectedId, reply, history);
+      const answer = await askRulebook(selectedId, trimmed, history);
       if (answer.ruling.needs_clarification && answer.ruling.clarification_question) {
         setClarificationFor(selectedId, {
-          originalQuestion: clarification?.originalQuestion ?? reply,
+          originalQuestion: clarification?.originalQuestion ?? trimmed,
           question: answer.ruling.clarification_question,
         });
       } else {
@@ -297,6 +295,15 @@ export default function App() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleAsk(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedId || !question.trim()) return;
+
+    const reply = question.trim();
+    setQuestion("");
+    await submitQuestion(reply);
   }
 
   async function handleDispute(e: React.FormEvent) {
@@ -400,7 +407,7 @@ export default function App() {
   }
 
   return (
-    <div className={`app${tableMode ? " table-mode" : ""}`}>
+    <div className={`app${selected ? " app-in-session" : ""}`}>
       <div className="table-rail table-rail-top" aria-hidden="true" />
       <header className="site-header panel">
         <div className="brand-mark" aria-hidden="true">
@@ -415,16 +422,17 @@ export default function App() {
           <p>Settle arguments with cited rulings — upload a rulebook and roll.</p>
         </div>
         <div className="header-dice" aria-hidden="true">
-          <DieD6 className="die-svg die-svg-sm" pip="six" />
-          <DieD20 className="die-svg die-svg-lg" value={20} />
+          <IconDice className="icon icon-lg" />
         </div>
       </header>
 
       {(error || info) && (
-        <div className="app-notice" role="status">
-          {info && <div className="info">{info}</div>}
-          {error && <div className="error">{error}</div>}
-        </div>
+        <AppNotice
+          error={error}
+          info={info}
+          onDismissError={() => setError(null)}
+          onDismissInfo={() => setInfo(null)}
+        />
       )}
 
       <div className="layout">
@@ -531,6 +539,8 @@ export default function App() {
                   <button
                     type="button"
                     className="delete"
+                    aria-label={`Delete ${book.name}`}
+                    title="Delete rulebook"
                     onClick={(e) => {
                       e.stopPropagation();
                       void handleDelete(book.id);
@@ -562,12 +572,11 @@ export default function App() {
           </section>
         </aside>
 
-        <main className={`chat panel${tableMode ? " table-mode" : ""}`}>
+        <main className="chat panel">
           {!selected ? (
             <div className="empty-state">
               <div className="empty-dice" aria-hidden="true">
-                <DieD6 className="die-svg die-svg-xl" pip="six" />
-                <DieD20 className="die-svg die-svg-lg" value={20} />
+                <IconDice className="icon icon-empty-dice" />
               </div>
               <h3>The table awaits</h3>
               <p className="muted">Drop a rulebook PDF into your library — then roll for rulings on timing, edge cases, and disputes.</p>
@@ -592,12 +601,16 @@ export default function App() {
                   <IconMenu className="icon icon-sm" />
                   Games
                 </button>
-                <span className="mobile-game-name">{selected.name}</span>
+                <div className="mobile-game-meta">
+                  <span className="mobile-app-brand">Rules Referee</span>
+                  <span className="mobile-game-name">{selected.name}</span>
+                </div>
               </div>
 
               <div className="chat-header">
                 <div className="chat-header-row">
-                  <div>
+                  <div className="chat-header-title">
+                    <span className="chat-app-brand">Rules Referee</span>
                     <h2>{selected.name}</h2>
                     <span className="chat-subtitle">
                       {chatMode === "ask"
@@ -626,42 +639,29 @@ export default function App() {
                         Dispute
                       </button>
                     </div>
-                    <button
-                      type="button"
-                      className={`table-mode-toggle${tableMode ? " active" : ""}`}
-                      aria-pressed={tableMode}
-                      title="Bigger rulings, high contrast, hide agent trace"
-                      onClick={() => setTableMode((current) => !current)}
-                    >
-                      {tableMode ? "Table mode on" : "Table mode"}
-                    </button>
-                    {messages.length > 0 && (
+                    <div className="chat-header-tools">
                       <button
                         type="button"
                         className="new-conversation"
-                        onClick={() => clearConversation(selected.id)}
+                        onClick={() => {
+                          void handleClearFaqCache(selected.id, selected.name);
+                        }}
                       >
-                        New conversation
+                        Clear FAQ cache
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      className="new-conversation"
-                      title="Clear cached repeat answers after re-index or errata"
-                      onClick={() => {
-                        void handleClearFaqCache(selected.id, selected.name);
-                      }}
-                    >
-                      Clear FAQ cache
-                    </button>
+                      {messages.length > 0 && (
+                        <ChatActionsMenu onNewConversation={() => clearConversation(selected.id)} />
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="messages">
-                {messages.length === 0 && exampleQuestions.length > 0 && (
+              <div className="messages" aria-busy={loading} aria-live="polite">
+                {messages.length === 0 && exampleQuestions.length > 0 && chatMode === "ask" && (
                   <div className="example-questions">
                     <p className="example-questions-label">Try asking</p>
+                    <p className="example-questions-hint">Tap a question to ask the referee.</p>
                     <div className="example-questions-list">
                       {exampleQuestions.map((example) => (
                         <button
@@ -670,8 +670,7 @@ export default function App() {
                           className="example-question"
                           disabled={loading}
                           onClick={() => {
-                            setQuestion(example);
-                            inputRef.current?.focus();
+                            void submitQuestion(example);
                           }}
                         >
                           {example}
@@ -680,7 +679,7 @@ export default function App() {
                     </div>
                   </div>
                 )}
-                {messages.length === 0 && exampleQuestions.length === 0 && (
+                {messages.length === 0 && exampleQuestions.length === 0 && chatMode === "ask" && (
                   <div className="hint">
                     Try: &ldquo;Can I play this card during another player&apos;s turn?&rdquo;
                     Follow up with: &ldquo;What about on the first turn?&rdquo;
@@ -713,10 +712,24 @@ export default function App() {
                   ) : (
                     <div key={i} className="message-wrap referee">
                       <span className="message-label">Referee</span>
-                      <RefereeAnswer rulebookId={selected.id} data={msg.data} tableMode={tableMode} />
+                      <RefereeAnswer rulebookId={selected.id} data={msg.data} />
                     </div>
                   )
                 )}
+                {loading && (
+                  <div className="message-wrap referee loading-message" aria-live="polite">
+                    <span className="message-label">Referee</span>
+                    <div className="bubble referee loading-bubble">
+                      <span className="loading-dots" aria-hidden="true">
+                        <span />
+                        <span />
+                        <span />
+                      </span>
+                      {chatMode === "dispute" ? "Weighing both sides…" : "Reading the rulebook…"}
+                    </div>
+                  </div>
+                )}
+                <div ref={messagesEndRef} className="messages-anchor" aria-hidden="true" />
               </div>
 
               <div className="chat-composer">
@@ -821,26 +834,17 @@ export default function App() {
 function RefereeAnswer({
   rulebookId,
   data,
-  tableMode,
 }: {
   rulebookId: string;
   data: AskResponse;
-  tableMode: boolean;
 }) {
   const { ruling, citation_check } = data;
   const needsInput = ruling.needs_clarification && ruling.clarification_question;
   const isDispute = data.mode === "dispute";
-  const [traceOpen, setTraceOpen] = useState(false);
-
-  const trace = (
-    <details open={tableMode ? traceOpen : undefined}>
-      <summary>Agent trace ({data.retrieval.chunks_found} passages from pages {data.retrieval.pages.join(", ")})</summary>
-      <pre>{JSON.stringify(data, null, 2)}</pre>
-    </details>
-  );
+  const confidenceHint = data.confidence_hint;
 
   return (
-    <div className={`bubble referee${needsInput ? " needs-clarification" : ""}${tableMode ? " table-mode-ruling" : ""}`}>
+    <div className={`bubble referee${needsInput ? " needs-clarification" : ""}`}>
       <div className="referee-stamp" aria-hidden="true">
         <IconScales className="icon icon-xs" />
         {isDispute ? "Dispute ruling" : "House ruling"}
@@ -860,21 +864,18 @@ function RefereeAnswer({
             </span>
           )}
           <span className={`badge ${ruling.confidence}`}>{ruling.confidence} confidence</span>
-          {!citation_check.all_valid && (
+          {!citation_check.all_valid && !confidenceHint && (
             <span className="badge warn">citations need review</span>
           )}
         </div>
       )}
 
-      <p className={`ruling${needsInput ? " tentative" : ""}`}>{ruling.ruling}</p>
-      {tableMode ? (
-        <details className="table-mode-reasoning">
-          <summary>Reasoning</summary>
-          <p className="reasoning">{ruling.reasoning}</p>
-        </details>
-      ) : (
-        <p className="reasoning">{ruling.reasoning}</p>
+      {!needsInput && confidenceHint && (
+        <ConfidenceHint hint={confidenceHint} />
       )}
+
+      <p className={`ruling${needsInput ? " tentative" : ""}`}>{ruling.ruling}</p>
+      <p className="reasoning">{ruling.reasoning}</p>
 
       {isDispute && (ruling.player_a_assessment || ruling.player_b_assessment) && (
         <div className="dispute-assessments">
@@ -894,7 +895,7 @@ function RefereeAnswer({
       )}
 
       {ruling.citations.length > 0 && (
-        <CitationsList rulebookId={rulebookId} data={data} tableMode={tableMode} />
+        <CitationsList rulebookId={rulebookId} data={data} />
       )}
 
       {!needsInput && (
@@ -904,30 +905,85 @@ function RefereeAnswer({
         </div>
       )}
 
-      {tableMode ? (
-        traceOpen ? (
-          <div className="agent-trace-wrap">
-            <button
-              type="button"
-              className="agent-trace-toggle"
-              onClick={() => setTraceOpen(false)}
-            >
-              Hide trace
-            </button>
-            {trace}
-          </div>
-        ) : (
-          <button
-            type="button"
-            className="agent-trace-toggle"
-            onClick={() => setTraceOpen(true)}
-          >
-            Show agent trace
+      <details>
+        <summary>
+          Agent trace ({data.retrieval.chunks_found} passages from pages {data.retrieval.pages.join(", ")})
+        </summary>
+        <pre>{JSON.stringify(data, null, 2)}</pre>
+      </details>
+    </div>
+  );
+}
+
+function AppNotice({
+  error,
+  info,
+  onDismissError,
+  onDismissInfo,
+}: {
+  error: string | null;
+  info: string | null;
+  onDismissError: () => void;
+  onDismissInfo: () => void;
+}) {
+  return (
+    <div className="app-notice" role="status">
+      {info && (
+        <div className="notice-banner info">
+          <p>{info}</p>
+          <button type="button" className="notice-dismiss" onClick={onDismissInfo} aria-label="Dismiss message">
+            <IconClose className="icon icon-sm" />
           </button>
-        )
-      ) : (
-        trace
+        </div>
       )}
+      {error && (
+        <div className="notice-banner error">
+          <p>{error}</p>
+          <button type="button" className="notice-dismiss" onClick={onDismissError} aria-label="Dismiss error">
+            <IconClose className="icon icon-sm" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChatActionsMenu({ onNewConversation }: { onNewConversation: () => void }) {
+  return (
+    <details className="chat-actions-menu">
+      <summary className="chat-toolbar-btn" aria-label="More actions">
+        <IconMore className="icon icon-sm" />
+      </summary>
+      <div className="chat-actions-panel">
+        <button
+          type="button"
+          onClick={(event) => {
+            onNewConversation();
+            event.currentTarget.closest("details")?.removeAttribute("open");
+          }}
+        >
+          New conversation
+        </button>
+      </div>
+    </details>
+  );
+}
+
+function ConfidenceHint({ hint }: { hint: ConfidenceHintInfo }) {
+  const title = hint.level === "low" ? "Low confidence" : "Check this ruling";
+
+  return (
+    <div
+      className={`confidence-hint confidence-hint-${hint.level}`}
+      role="status"
+      aria-label={title}
+    >
+      <p className="confidence-hint-title">{title}</p>
+      <ul className="confidence-hint-list">
+        {hint.messages.map((message) => (
+          <li key={message}>{message}</li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -1059,11 +1115,9 @@ function RulingFeedback({ rulebookId, data }: { rulebookId: string; data: AskRes
 function CitationsList({
   rulebookId,
   data,
-  tableMode,
 }: {
   rulebookId: string;
   data: AskResponse;
-  tableMode: boolean;
 }) {
   const { ruling, citation_check } = data;
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
@@ -1074,7 +1128,7 @@ function CitationsList({
   const list = (
     <>
       <p className="citations-hint">
-        {tableMode ? "Tap a citation for the PDF page." : "Tap a citation to view the PDF page and excerpt."}
+        Tap a citation to view the PDF page and excerpt.
       </p>
       <ul className="citation-list">
         {ruling.citations.map((citation, index) => {
@@ -1101,6 +1155,7 @@ function CitationsList({
       </ul>
       {selected && selectedRuling && (
         <SourcePanel
+          key={`${rulebookId}-${selected.page}-${selectedIndex}`}
           rulebookId={rulebookId}
           citation={selected}
           quote={selectedRuling.quote}
@@ -1113,17 +1168,8 @@ function CitationsList({
 
   return (
     <div className="citations">
-      {tableMode ? (
-        <details className="table-mode-citations">
-          <summary>Citations ({ruling.citations.length})</summary>
-          {list}
-        </details>
-      ) : (
-        <>
-          <h4>Citations</h4>
-          {list}
-        </>
-      )}
+      <h4>Citations</h4>
+      {list}
     </div>
   );
 }
@@ -1142,10 +1188,6 @@ function SourcePanel({
   onClose: () => void;
 }) {
   const [previewFailed, setPreviewFailed] = useState(false);
-
-  useEffect(() => {
-    setPreviewFailed(false);
-  }, [rulebookId, citation.page]);
 
   const excerpt =
     citation.source_excerpt

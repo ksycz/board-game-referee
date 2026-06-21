@@ -14,7 +14,12 @@ class CapturingReferee:
         self.chunks: list[StoredChunk] | None = None
         self.calls = 0
 
-    def rule_on(self, question: str, chunks: list[StoredChunk], history: list[dict] | None = None) -> dict:
+    def rule_on(
+        self,
+        question: str,
+        chunks: list[StoredChunk],
+        history: list[dict] | None = None,
+    ) -> dict:
         self.calls += 1
         self.question = question
         self.history = history
@@ -35,7 +40,10 @@ class CapturingReferee:
 def test_pipeline_ask_passes_trimmed_history_to_referee(sample_pdf, isolated_data):
     pipeline = RefereePipeline()
     upload = pipeline.upload_rulebook(
-        "Test Game", "test.pdf", sample_pdf.read_bytes(), original_filename="sample-rulebook.pdf"
+        "Test Game",
+        "test.pdf",
+        sample_pdf.read_bytes(),
+        original_filename="sample-rulebook.pdf",
     )
     book_id = upload["rulebook"].id
 
@@ -63,7 +71,10 @@ def test_pipeline_ask_passes_trimmed_history_to_referee(sample_pdf, isolated_dat
 def test_pipeline_ask_includes_retrieval_metrics(sample_pdf, isolated_data):
     pipeline = RefereePipeline()
     upload = pipeline.upload_rulebook(
-        "Test Game", "test.pdf", sample_pdf.read_bytes(), original_filename="sample-rulebook.pdf"
+        "Test Game",
+        "test.pdf",
+        sample_pdf.read_bytes(),
+        original_filename="sample-rulebook.pdf",
     )
     book_id = upload["rulebook"].id
 
@@ -83,7 +94,10 @@ def test_pipeline_ask_includes_retrieval_metrics(sample_pdf, isolated_data):
 def test_pipeline_ask_retrieves_with_follow_up_query(sample_pdf, isolated_data):
     pipeline = RefereePipeline()
     upload = pipeline.upload_rulebook(
-        "Test Game", "test.pdf", sample_pdf.read_bytes(), original_filename="sample-rulebook.pdf"
+        "Test Game",
+        "test.pdf",
+        sample_pdf.read_bytes(),
+        original_filename="sample-rulebook.pdf",
     )
     book_id = upload["rulebook"].id
 
@@ -105,7 +119,10 @@ def test_pipeline_ask_retrieves_with_follow_up_query(sample_pdf, isolated_data):
 def test_retrieval_query_improves_follow_up_hits(sample_pdf, isolated_data):
     pipeline = RefereePipeline()
     upload = pipeline.upload_rulebook(
-        "Test Game", "test.pdf", sample_pdf.read_bytes(), original_filename="sample-rulebook.pdf"
+        "Test Game",
+        "test.pdf",
+        sample_pdf.read_bytes(),
+        original_filename="sample-rulebook.pdf",
     )
     book_id = upload["rulebook"].id
 
@@ -126,7 +143,10 @@ def test_pipeline_ask_returns_cached_answer_without_second_llm_call(
 ):
     pipeline = RefereePipeline()
     upload = pipeline.upload_rulebook(
-        "Test Game", "test.pdf", sample_pdf.read_bytes(), original_filename="sample-rulebook.pdf"
+        "Test Game",
+        "test.pdf",
+        sample_pdf.read_bytes(),
+        original_filename="sample-rulebook.pdf",
     )
     book_id = upload["rulebook"].id
 
@@ -148,7 +168,10 @@ def test_pipeline_clear_faq_cache_forces_fresh_answer(
 ):
     pipeline = RefereePipeline()
     upload = pipeline.upload_rulebook(
-        "Test Game", "test.pdf", sample_pdf.read_bytes(), original_filename="sample-rulebook.pdf"
+        "Test Game",
+        "test.pdf",
+        sample_pdf.read_bytes(),
+        original_filename="sample-rulebook.pdf",
     )
     book_id = upload["rulebook"].id
 

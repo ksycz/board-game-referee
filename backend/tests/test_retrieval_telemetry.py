@@ -1,11 +1,11 @@
 """Tests for retrieval telemetry metrics and benchmark helpers."""
 
 import json
-from pathlib import Path
 
 from services.retrieval_benchmark import SAMPLE_RULEBOOK_CASES
 from services.retrieval_telemetry import (
     cited_pages,
+    compute_confidence_hint,
     compute_retrieval_metrics,
     log_retrieval_event,
     summarize_telemetry_log,
@@ -48,10 +48,62 @@ def test_compute_retrieval_metrics_tracks_overlap_and_pass_rate():
     assert metrics["all_citations_valid"] is False
 
 
+def test_compute_confidence_hint_flags_weak_retrieval_and_citations():
+    metrics = compute_retrieval_metrics(
+        retrieved_pages=[2, 3],
+        ruling={"citations": [{"page": 2, "quote": "x"}, {"page": 7, "quote": "y"}], "confidence": "low"},
+        citation_check={
+            "all_valid": False,
+            "citations": [{"page": 2, "valid": True}, {"page": 7, "valid": False}],
+        },
+    )
+
+    hint = compute_confidence_hint(
+        chunks_found=1,
+        ruling={"citations": [{"page": 2}, {"page": 7}], "confidence": "low"},
+        citation_check={
+            "all_valid": False,
+            "citations": [{"page": 2, "valid": True}, {"page": 7, "valid": False}],
+        },
+        metrics=metrics,
+    )
+
+    assert hint is not None
+    assert hint["level"] == "low"
+    assert any("few rulebook passages" in message for message in hint["messages"])
+    assert any("page(s) 7" in message for message in hint["messages"])
+    assert any("low confidence" in message for message in hint["messages"])
+
+
+def test_compute_confidence_hint_returns_none_when_grounding_is_strong():
+    metrics = compute_retrieval_metrics(
+        retrieved_pages=[2, 3, 4],
+        ruling={"citations": [{"page": 2, "quote": "x"}], "confidence": "high"},
+        citation_check={"all_valid": True, "citations": [{"page": 2, "valid": True}]},
+    )
+
+    hint = compute_confidence_hint(
+        chunks_found=5,
+        ruling={"citations": [{"page": 2}], "confidence": "high"},
+        citation_check={"all_valid": True, "citations": [{"page": 2, "valid": True}]},
+        metrics=metrics,
+    )
+
+    assert hint is None
+
+
 def test_log_retrieval_event_writes_jsonl(tmp_path):
     log_path = tmp_path / "telemetry.jsonl"
-    log_retrieval_event({"mode": "ask", "metrics": {"citation_recall": 1.0}}, log_path=log_path, enabled=True)
-    log_retrieval_event({"mode": "ask", "metrics": {"citation_recall": 0.5}}, log_path=log_path, enabled=True)
+    log_retrieval_event(
+        {"mode": "ask", "metrics": {"citation_recall": 1.0}},
+        log_path=log_path,
+        enabled=True,
+    )
+    log_retrieval_event(
+        {"mode": "ask", "metrics": {"citation_recall": 0.5}},
+        log_path=log_path,
+        enabled=True,
+    )
 
     lines = log_path.read_text(encoding="utf-8").strip().splitlines()
     assert len(lines) == 2

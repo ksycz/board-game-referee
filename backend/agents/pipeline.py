@@ -14,13 +14,19 @@ from config import TOP_K_CHUNKS
 from services.conversation import dispute_retrieval_query, retrieval_query, trim_history
 from services.example_questions import example_questions_for_rulebook
 from services.faq_cache import FaqCache, ask_lookup_key, dispute_lookup_key
-from services.game_name import derive_game_name, extract_game_name_from_pdf, looks_like_filename
+from services.game_name import derive_game_name
 from services.retrieval_telemetry import (
+    compute_confidence_hint,
     compute_retrieval_metrics,
     log_retrieval_event,
     log_ruling_feedback,
 )
-from services.rulebook_store import DuplicateRulebookError, Rulebook, RulebookStore, pdf_content_hash
+from services.rulebook_store import (
+    DuplicateRulebookError,
+    Rulebook,
+    RulebookStore,
+    pdf_content_hash,
+)
 from services.vector_store import VectorStore
 
 
@@ -74,6 +80,14 @@ class RefereePipeline:
         )
         response["response_id"] = str(uuid.uuid4())
         response["retrieval"]["metrics"] = metrics
+        hint = compute_confidence_hint(
+            chunks_found=response["retrieval"]["chunks_found"],
+            ruling=response["ruling"],
+            citation_check=response["citation_check"],
+            metrics=metrics,
+        )
+        if hint:
+            response["confidence_hint"] = hint
         log_retrieval_event(
             {
                 "response_id": response["response_id"],

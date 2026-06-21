@@ -7,8 +7,7 @@ import fitz
 PAGES = [
     (
         "Setup",
-        "Each player draws 5 cards. Place the board in the center. "
-        "The youngest player goes first.",
+        "Each player draws 5 cards. Place the board in the center. The youngest player goes first.",
     ),
     (
         "Turn Order",

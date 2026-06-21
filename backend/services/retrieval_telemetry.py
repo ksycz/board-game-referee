@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -58,6 +58,61 @@ def compute_retrieval_metrics(
     }
 
 
+def compute_confidence_hint(
+    *,
+    chunks_found: int,
+    ruling: dict,
+    citation_check: dict,
+    metrics: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Explain when retrieval or citations look weak."""
+    messages: list[str] = []
+    severity = 0
+
+    if chunks_found == 0:
+        messages.append("No rulebook passages matched this question.")
+        severity = max(severity, 2)
+    elif chunks_found <= 2:
+        messages.append("Only a few rulebook passages matched this question.")
+        severity = max(severity, 1)
+
+    missing = metrics.get("cited_missing_from_retrieval") or []
+    if missing:
+        page_list = ", ".join(str(page) for page in missing)
+        messages.append(f"Cited page(s) {page_list} were not in the retrieved passages.")
+        severity = max(severity, 1)
+
+    invalid_count = sum(
+        1 for entry in citation_check.get("citations") or [] if entry.get("valid") is False
+    )
+    if invalid_count:
+        label = "citation" if invalid_count == 1 else "citations"
+        messages.append(
+            f"{invalid_count} {label} could not be verified against the retrieved rulebook text."
+        )
+        severity = max(severity, 1)
+
+    pass_rate = metrics.get("citation_pass_rate")
+    if pass_rate is not None and pass_rate < 0.5 and metrics.get("citations_checked", 0) > 0:
+        messages.append("Most citations failed verification against retrieved passages.")
+        severity = max(severity, 2)
+
+    referee_confidence = ruling.get("confidence")
+    if referee_confidence == "low":
+        messages.append("The referee reported low confidence in this ruling.")
+        severity = max(severity, 2)
+    elif referee_confidence == "medium" and severity >= 1:
+        messages.append("The referee reported medium confidence in this ruling.")
+
+    if not messages:
+        return None
+
+    return {
+        "level": "low" if severity >= 2 else "caution",
+        "messages": messages,
+    }
+
+
 def log_retrieval_event(
     event: dict[str, Any],
     *,
@@ -72,7 +127,7 @@ def log_retrieval_event(
     path = log_path or RETRIEVAL_LOG_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         **event,
     }
     with path.open("a", encoding="utf-8") as handle:
@@ -93,7 +148,7 @@ def log_ruling_feedback(
     path = log_path or RULING_FEEDBACK_LOG_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "event": "ruling_feedback",
         **event,
     }
@@ -127,8 +182,7 @@ def summarize_telemetry_log(log_path: Path) -> dict[str, Any]:
         if event.get("metrics", {}).get("citation_pass_rate") is not None
     ]
     missing = sum(
-        len(event.get("metrics", {}).get("cited_missing_from_retrieval") or [])
-        for event in events
+        len(event.get("metrics", {}).get("cited_missing_from_retrieval") or []) for event in events
     )
 
     return {

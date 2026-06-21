@@ -6,7 +6,12 @@ from services.vector_store import StoredChunk
 
 def test_suggest_questions_from_sections_and_text():
     chunks = [
-        StoredChunk(chunk_id="1", page=1, text="Each player draws 5 cards.", section_hint="Setup"),
+        StoredChunk(
+            chunk_id="1",
+            page=1,
+            text="Each player draws 5 cards.",
+            section_hint="Setup",
+        ),
         StoredChunk(
             chunk_id="2",
             page=2,
@@ -63,13 +68,26 @@ def test_suggest_questions_ignores_component_inventory_sections():
 
     questions = suggest_questions(chunks, limit=2)
 
-    assert questions == ["How do I set up the game?", "Can I play this card during another player's turn?"]
+    assert questions == [
+        "How do I set up the game?",
+        "Can I play this card during another player's turn?",
+    ]
 
 
 def test_suggest_questions_ignores_noise_section_hints():
     chunks = [
-        StoredChunk(chunk_id="1", page=1, text="Players take turns in clockwise order.", section_hint="C"),
-        StoredChunk(chunk_id="2", page=2, text="The game ends when someone scores 10 points.", section_hint="IV"),
+        StoredChunk(
+            chunk_id="1",
+            page=1,
+            text="Players take turns in clockwise order.",
+            section_hint="C",
+        ),
+        StoredChunk(
+            chunk_id="2",
+            page=2,
+            text="The game ends when someone scores 10 points.",
+            section_hint="IV",
+        ),
     ]
 
     questions = suggest_questions(chunks, limit=3)
