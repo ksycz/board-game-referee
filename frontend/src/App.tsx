@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import type { ConfidenceHint as ConfidenceHintInfo } from "./api";
 import {
   AskResponse,
@@ -338,7 +339,9 @@ export default function App() {
       if (isEscape && !event.isComposing) {
         let handled = false;
 
-        if (document.querySelector(".source-panel")) {
+        if (document.querySelector(".page-preview-lightbox")) {
+          handled = true;
+        } else if (document.querySelector(".source-panel")) {
           setOverlayDismissTick((tick) => tick + 1);
           handled = true;
         } else {
@@ -1570,6 +1573,101 @@ function QuickSearchPanel({
   );
 }
 
+function RulebookPagePreview({
+  rulebookId,
+  page,
+}: {
+  rulebookId: string;
+  page: number;
+}) {
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const thumbUrl = rulebookPagePreviewUrl(rulebookId, page, { zoom: 2 });
+  const largeUrl = rulebookPagePreviewUrl(rulebookId, page, { zoom: 3.5 });
+
+  const closeLightbox = useCallback((event?: { stopPropagation?: () => void }) => {
+    event?.stopPropagation?.();
+    setExpanded(false);
+  }, []);
+
+  useEffect(() => {
+    if (!expanded) {
+      return;
+    }
+    document.documentElement.classList.add("page-preview-lightbox-open");
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.key === "Escape" || event.code === "Escape") && !event.isComposing) {
+        event.stopImmediatePropagation();
+        setExpanded(false);
+      }
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.documentElement.classList.remove("page-preview-lightbox-open");
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [expanded]);
+
+  if (previewFailed) {
+    return null;
+  }
+
+  const lightbox = expanded ? (
+    <div
+      className="page-preview-lightbox"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Rulebook page ${page}`}
+    >
+      <button
+        type="button"
+        className="page-preview-lightbox-backdrop"
+        onClick={(event) => closeLightbox(event)}
+        aria-label="Close enlarged page"
+      />
+      <div
+        className="page-preview-lightbox-frame"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          className="page-preview-lightbox-close"
+          onClick={(event) => closeLightbox(event)}
+        >
+          Close
+        </button>
+        <img src={largeUrl} alt={`Rulebook page ${page} (enlarged)`} />
+      </div>
+    </div>
+  ) : null;
+
+  return (
+    <>
+      <figure className="source-panel-preview">
+        <button
+          type="button"
+          className="source-panel-preview-trigger"
+          onClick={() => setExpanded(true)}
+          aria-label={`Enlarge rulebook page ${page}`}
+        >
+          <img
+            src={thumbUrl}
+            alt={`Rulebook page ${page}`}
+            loading="lazy"
+            onError={() => setPreviewFailed(true)}
+          />
+          <span className="source-panel-preview-hint" aria-hidden="true">
+            Tap to enlarge
+          </span>
+        </button>
+      </figure>
+      {lightbox && typeof document !== "undefined"
+        ? createPortal(lightbox, document.body)
+        : null}
+    </>
+  );
+}
+
 function QuickSearchHitPanel({
   rulebookId,
   hit,
@@ -1579,9 +1677,6 @@ function QuickSearchHitPanel({
   hit: SearchHit;
   onClose: () => void;
 }) {
-  const [previewFailed, setPreviewFailed] = useState(false);
-  const previewUrl = rulebookPagePreviewUrl(rulebookId, hit.page);
-
   return (
     <div className="source-panel" role="region" aria-label="Search result excerpt">
       <div className="source-panel-header">
@@ -1597,16 +1692,7 @@ function QuickSearchHitPanel({
         </button>
       </div>
       <div className="source-panel-content">
-        {!previewFailed && (
-          <figure className="source-panel-preview">
-            <img
-              src={previewUrl}
-              alt={`Rulebook page ${hit.page}`}
-              loading="lazy"
-              onError={() => setPreviewFailed(true)}
-            />
-          </figure>
-        )}
+        <RulebookPagePreview rulebookId={rulebookId} page={hit.page} />
         <blockquote className="source-panel-excerpt">{cleanSearchExcerpt(hit.text)}</blockquote>
       </div>
     </div>
@@ -1955,14 +2041,11 @@ function SourcePanel({
   sources: SourceExcerpt[];
   onClose: () => void;
 }) {
-  const [previewFailed, setPreviewFailed] = useState(false);
-
   const excerpt =
     citation.source_excerpt
     ?? sources.find((source) => source.page === citation.page)?.text
     ?? null;
   const section = citation.source_section ?? citation.section ?? sources.find((s) => s.page === citation.page)?.section;
-  const previewUrl = rulebookPagePreviewUrl(rulebookId, citation.page);
 
   return (
     <div className="source-panel" role="region" aria-label="Source excerpt">
@@ -1979,16 +2062,7 @@ function SourcePanel({
         </button>
       </div>
       <div className="source-panel-content">
-        {!previewFailed && (
-          <figure className="source-panel-preview">
-            <img
-              src={previewUrl}
-              alt={`Rulebook page ${citation.page}`}
-              loading="lazy"
-              onError={() => setPreviewFailed(true)}
-            />
-          </figure>
-        )}
+        <RulebookPagePreview rulebookId={rulebookId} page={citation.page} />
         {excerpt ? (
           <div className="source-panel-body">{highlightQuoteInExcerpt(excerpt, quote)}</div>
         ) : (

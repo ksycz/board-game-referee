@@ -647,8 +647,16 @@ export async function pinRulebook(rulebookId: string, pinned: boolean): Promise<
   return res.json();
 }
 
-export function rulebookPagePreviewUrl(rulebookId: string, page: number): string {
-  return `${API}/api/rulebooks/${rulebookId}/pages/${page}/preview`;
+export function rulebookPagePreviewUrl(
+  rulebookId: string,
+  page: number,
+  options?: { zoom?: number },
+): string {
+  let path = `${API}/api/rulebooks/${rulebookId}/pages/${page}/preview`;
+  if (options?.zoom !== undefined) {
+    path += `?zoom=${encodeURIComponent(String(options.zoom))}`;
+  }
+  return path;
 }
 
 export async function clearFaqCache(rulebookId: string): Promise<number> {

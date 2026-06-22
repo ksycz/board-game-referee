@@ -283,11 +283,12 @@ def clear_faq_cache(rulebook_id: str):
 
 
 @app.get("/api/rulebooks/{rulebook_id}/pages/{page}/preview")
-def rulebook_page_preview(rulebook_id: str, page: int):
+def rulebook_page_preview(rulebook_id: str, page: int, zoom: float = 1.5):
     if page < 1:
         raise HTTPException(status_code=400, detail="Page number must be at least 1")
+    zoom = max(1.0, min(4.0, zoom))
     try:
-        png_bytes = pipeline.render_page_preview(rulebook_id, page)
+        png_bytes = pipeline.render_page_preview(rulebook_id, page, zoom=zoom)
     except KeyError:
         raise HTTPException(status_code=404, detail="Rulebook not found")
     except ValueError as exc:

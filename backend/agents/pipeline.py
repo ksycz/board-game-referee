@@ -282,7 +282,7 @@ class RefereePipeline:
             raise KeyError(f"Rulebook not found: {rulebook_id}")
         return self.faq_cache.clear_rulebook(rulebook_id)
 
-    def render_page_preview(self, rulebook_id: str, page: int) -> bytes:
+    def render_page_preview(self, rulebook_id: str, page: int, *, zoom: float = 1.5) -> bytes:
         from services.pdf_page_preview import render_page_png
 
         book = self.store.get(rulebook_id)
@@ -291,7 +291,7 @@ class RefereePipeline:
         pdf_path = self.store.pdf_path(rulebook_id)
         if not pdf_path.exists():
             raise FileNotFoundError(f"PDF not found for rulebook: {rulebook_id}")
-        return render_page_png(pdf_path, page)
+        return render_page_png(pdf_path, page, zoom=zoom)
 
     def dedupe_rulebooks(self) -> int:
         """Remove extra copies of the same PDF, keeping the oldest upload per hash."""

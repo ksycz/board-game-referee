@@ -478,6 +478,10 @@ def test_rulebook_page_preview(client, sample_pdf):
     assert res.headers["content-type"] == "image/png"
     assert res.content.startswith(b"\x89PNG\r\n\x1a\n")
 
+    res_zoomed = client.get(f"/api/rulebooks/{book_id}/pages/1/preview?zoom=3")
+    assert res_zoomed.status_code == 200
+    assert len(res_zoomed.content) > len(res.content)
+
 
 def test_rulebook_page_preview_unknown_book_returns_404(client):
     res = client.get("/api/rulebooks/does-not-exist/pages/1/preview")
