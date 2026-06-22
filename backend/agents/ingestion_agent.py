@@ -26,17 +26,21 @@ class IngestionAgent:
         on_progress: ProgressCallback | None = None,
     ) -> dict:
         chunks: list[TextChunk]
-        chunks, page_count, ocr_pages = extract_chunks(
+        chunks, total_pages, pages_indexed, ocr_pages, thin_pages = extract_chunks(
             pdf_path,
             on_progress=on_progress,
         )
         if on_progress is not None:
-            on_progress({"phase": "indexing", "page": 0, "total_pages": page_count})
+            on_progress({"phase": "indexing", "page": 0, "total_pages": total_pages})
         indexed = self.vector_store.index_rulebook(rulebook_id, chunks)
         result = {
             "agent": "ingestion",
-            "pages_extracted": page_count,
+            "total_pages": total_pages,
+            "pages_indexed": pages_indexed,
+            "pages_extracted": pages_indexed,
             "chunks_indexed": indexed,
+            "thin_pages": thin_pages,
+            "thin_page_count": len(thin_pages),
         }
         if ocr_pages:
             result["ocr_pages"] = ocr_pages

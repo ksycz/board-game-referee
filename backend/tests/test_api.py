@@ -51,6 +51,8 @@ def test_upload_and_list(client, sample_pdf):
     body = res.json()
     assert body["rulebook"]["name"] == "Test Game"
     assert body["ingestion"]["pages_extracted"] == 4
+    assert body["ingestion"]["total_pages"] == 4
+    assert body["ingestion"]["thin_page_count"] == 0
     assert len(body["example_questions"]) == 3
 
     listed = client.get("/api/rulebooks").json()

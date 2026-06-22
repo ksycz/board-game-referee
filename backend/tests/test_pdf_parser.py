@@ -22,18 +22,26 @@ def _make_pdf(pages: list[tuple[str, str]], path):
     doc.close()
 
 
+_RULES_BODY = (
+    "Each player draws five cards at the start of the game. "
+    "Place one settlement on any intersection along the board edge."
+)
+
+
 def test_short_page_stays_single_chunk(tmp_path):
     pdf = tmp_path / "short.pdf"
-    _make_pdf([("Setup", "Each player draws 5 cards.")], pdf)
+    _make_pdf([("Setup", _RULES_BODY)], pdf)
 
-    chunks, page_count, ocr_pages = extract_chunks(pdf)
+    chunks, total_pages, pages_indexed, ocr_pages, thin_pages = extract_chunks(pdf)
 
-    assert page_count == 1
+    assert total_pages == 1
+    assert pages_indexed == 1
     assert ocr_pages == 0
+    assert thin_pages == []
     assert len(chunks) == 1
     assert chunks[0].page == 1
     assert chunks[0].section_hint == "Setup"
-    assert "draws 5 cards" in chunks[0].text
+    assert "draws five cards" in chunks[0].text
 
 
 def test_long_page_splits_into_multiple_chunks():
@@ -117,16 +125,18 @@ def test_multi_page_pdf_reports_page_count(tmp_path):
     pdf = tmp_path / "multi.pdf"
     _make_pdf(
         [
-            ("Setup", "Each player draws 5 cards."),
-            ("Combat", "To attack, discard one card and roll the die."),
+            ("Setup", _RULES_BODY),
+            ("Combat", "To attack, discard one card and roll the die. The defender may block with a shield card."),
         ],
         pdf,
     )
 
-    chunks, page_count, ocr_pages = extract_chunks(pdf)
+    chunks, total_pages, pages_indexed, ocr_pages, thin_pages = extract_chunks(pdf)
 
-    assert page_count == 2
+    assert total_pages == 2
+    assert pages_indexed == 2
     assert ocr_pages == 0
+    assert thin_pages == []
     assert len(chunks) == 2
     assert {chunk.page for chunk in chunks} == {1, 2}
 
@@ -185,10 +195,12 @@ def test_ocr_fallback_upgrades_sparse_page(monkeypatch, tmp_path):
 
     monkeypatch.setattr(pdf_parser, "_extract_page_text_ocr", fake_ocr)
 
-    chunks, page_count, ocr_pages = extract_chunks(pdf)
+    chunks, total_pages, pages_indexed, ocr_pages, thin_pages = extract_chunks(pdf)
 
-    assert page_count == 1
+    assert total_pages == 1
+    assert pages_indexed == 1
     assert ocr_pages == 1
+    assert thin_pages == []
     assert len(chunks) == 1
     assert "choose one action" in chunks[0].text.lower()
 
@@ -206,10 +218,37 @@ def test_ocr_fallback_disabled_skips_ocr(monkeypatch, tmp_path):
 
     monkeypatch.setattr(pdf_parser, "_extract_page_text_ocr", fail_ocr)
 
-    chunks, page_count, ocr_pages = extract_chunks(pdf)
+    chunks, total_pages, pages_indexed, ocr_pages, thin_pages = extract_chunks(pdf)
 
-    assert page_count == 0
+    assert total_pages == 1
+    assert pages_indexed == 0
     assert ocr_pages == 0
+    assert thin_pages == [1]
+    assert chunks == []
+
+
+def test_extract_chunks_marks_component_list_page_as_thin(tmp_path):
+    pdf = tmp_path / "components.pdf"
+    _make_pdf([("Components", "5 cards, 2 dice, 1 board")], pdf)
+
+    chunks, total_pages, pages_indexed, ocr_pages, thin_pages = extract_chunks(pdf)
+
+    assert total_pages == 1
+    assert pages_indexed == 1
+    assert thin_pages == [1]
+    assert len(chunks) == 1
+
+
+def test_extract_chunks_marks_sparse_page_as_thin(tmp_path):
+    pdf = tmp_path / "sparse.pdf"
+    _make_pdf([("Choose Actions", "2")], pdf)
+
+    chunks, total_pages, pages_indexed, ocr_pages, thin_pages = extract_chunks(pdf)
+
+    assert total_pages == 1
+    assert pages_indexed == 0
+    assert ocr_pages == 0
+    assert thin_pages == [1]
     assert chunks == []
 
 
@@ -217,8 +256,8 @@ def test_extract_chunks_reports_progress(tmp_path):
     pdf = tmp_path / "multi.pdf"
     _make_pdf(
         [
-            ("Setup", "Each player draws 5 cards."),
-            ("Combat", "To attack, discard one card and roll the die."),
+            ("Setup", _RULES_BODY),
+            ("Combat", "To attack, discard one card and roll the die. The defender may block with a shield card."),
         ],
         pdf,
     )

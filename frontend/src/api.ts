@@ -167,11 +167,59 @@ export type UploadProgress = {
 
 export type IngestionResult = {
   agent: string;
+  total_pages?: number;
+  pages_indexed?: number;
   pages_extracted: number;
   chunks_indexed: number;
   ocr_pages?: number;
+  thin_pages?: number[];
+  thin_page_count?: number;
   ocr_warning?: string;
 };
+
+export const CONTEXT_ENGINEERING_PDF_GUIDE_URL =
+  "https://github.com/ksycz/board-game-referee/blob/main/docs/CONTEXT_ENGINEERING.md#graphical--layout-heavy-pdfs";
+
+export type RulebookHealthSummary = {
+  name: string;
+  totalPages: number;
+  pagesIndexed: number;
+  chunksIndexed: number;
+  ocrPages: number;
+  thinPages: number[];
+  ocrWarning?: string;
+};
+
+export function buildRulebookHealthSummary(
+  name: string,
+  ingestion?: IngestionResult,
+): RulebookHealthSummary | null {
+  if (!ingestion) {
+    return null;
+  }
+
+  const pagesIndexed = ingestion.pages_indexed ?? ingestion.pages_extracted;
+  return {
+    name,
+    totalPages: ingestion.total_pages ?? pagesIndexed,
+    pagesIndexed,
+    chunksIndexed: ingestion.chunks_indexed,
+    ocrPages: ingestion.ocr_pages ?? 0,
+    thinPages: ingestion.thin_pages ?? [],
+    ocrWarning: ingestion.ocr_warning,
+  };
+}
+
+export function formatThinPagesLabel(pages: number[]): string {
+  if (pages.length === 0) {
+    return "";
+  }
+  if (pages.length <= 6) {
+    return `pages ${pages.join(", ")}`;
+  }
+  const preview = pages.slice(0, 5).join(", ");
+  return `pages ${preview}, … (+${pages.length - 5} more)`;
+}
 
 export type UploadResponse = {
   rulebook: Rulebook;

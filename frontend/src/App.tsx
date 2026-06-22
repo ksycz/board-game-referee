@@ -13,8 +13,10 @@ import {
   deleteRulebook,
   disputeRulebook,
   fetchExampleQuestions,
+  buildRulebookHealthSummary,
+  formatThinPagesLabel,
+  CONTEXT_ENGINEERING_PDF_GUIDE_URL,
   formatUploadProgressMessage,
-  formatUploadSuccessMessage,
   formatFileSize,
   isDuplicateRulebookError,
   listRulebooks,
@@ -25,6 +27,7 @@ import {
   uploadProgressPercent,
   uploadRulebook,
   type UploadProgress,
+  type RulebookHealthSummary,
 } from "./api";
 import {
   IconBook,
@@ -188,6 +191,7 @@ export default function App() {
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [error, setError] = useState<AppError | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [uploadHealth, setUploadHealth] = useState<RulebookHealthSummary | null>(null);
   const [showAllRulebooks, setShowAllRulebooks] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => loadSidebarCollapsed());
@@ -433,7 +437,8 @@ export default function App() {
     }));
     clearConversation(upload.rulebook.id);
     await refresh();
-    setInfo(formatUploadSuccessMessage(upload.rulebook.name, upload.ingestion));
+    setUploadHealth(buildRulebookHealthSummary(upload.rulebook.name, upload.ingestion));
+    setInfo(null);
     setBggCandidates(null);
     setBggUrl("");
   }
@@ -445,6 +450,7 @@ export default function App() {
     setUploadProgress({ phase: "starting", page: 0, total_pages: 0 });
     setError(null);
     setInfo(null);
+    setUploadHealth(null);
     try {
       const upload = await uploadRulebook(file, uploadName || undefined, (progress) => {
         setUploadProgress(progress);
@@ -693,13 +699,21 @@ export default function App() {
         </div>
       </header>
 
-      {(error || info) && (
-        <AppNotice
-          error={error}
-          info={info}
-          onDismissError={() => setError(null)}
-          onDismissInfo={() => setInfo(null)}
-        />
+      {(error || info || uploadHealth) && (
+        <div className="app-notice" role="status">
+          {uploadHealth && (
+            <RulebookHealthNotice
+              health={uploadHealth}
+              onDismiss={() => setUploadHealth(null)}
+            />
+          )}
+          <AppNotice
+            error={error}
+            info={info}
+            onDismissError={() => setError(null)}
+            onDismissInfo={() => setInfo(null)}
+          />
+        </div>
       )}
 
       <div className={`layout${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
@@ -818,14 +832,6 @@ export default function App() {
                             {file.filename} · {formatFileSize(file.size)}
                             {file.votes > 0 ? ` · ${file.votes} thumbs` : ""}
                           </span>
-                        </a>
-                        <a
-                          className="bgg-file-link"
-                          href={file.download_url}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Download on BGG
                         </a>
                       </li>
                     ))}
@@ -1316,6 +1322,54 @@ function RefereeAnswer({
   );
 }
 
+function RulebookHealthNotice({
+  health,
+  onDismiss,
+}: {
+  health: RulebookHealthSummary;
+  onDismiss: () => void;
+}) {
+  const needsHelp = health.thinPages.length > 0 || !!health.ocrWarning;
+  const thinLabel = formatThinPagesLabel(health.thinPages);
+  const ocrLabel = health.ocrPages === 1
+    ? "1 page scanned (OCR)"
+    : `${health.ocrPages} pages scanned (OCR)`;
+
+  return (
+    <div
+      className={`notice-banner ${needsHelp ? "health-warn" : "health-ok"}`}
+      role="status"
+    >
+      <div className="notice-banner-copy">
+        <p className="notice-banner-title">{health.name} indexed</p>
+        <ul className="rulebook-health-list">
+          <li>
+            {health.pagesIndexed} of {health.totalPages} pages indexed · {health.chunksIndexed} passages
+          </li>
+          {health.ocrPages > 0 && <li>{ocrLabel}</li>}
+          {health.thinPages.length > 0 && (
+            <li>
+              {health.thinPages.length} thin page{health.thinPages.length === 1 ? "" : "s"}
+              {thinLabel ? ` (${thinLabel})` : ""} — may answer poorly there
+            </li>
+          )}
+        </ul>
+        {health.ocrWarning && <p className="notice-banner-hint">{health.ocrWarning}</p>}
+        {needsHelp && (
+          <p className="notice-banner-hint">
+            <a href={CONTEXT_ENGINEERING_PDF_GUIDE_URL} target="_blank" rel="noreferrer">
+              Troubleshooting graphical PDFs
+            </a>
+          </p>
+        )}
+      </div>
+      <button type="button" className="notice-dismiss" onClick={onDismiss} aria-label="Dismiss message">
+        <IconClose className="icon icon-sm" />
+      </button>
+    </div>
+  );
+}
+
 function AppNotice({
   error,
   info,
@@ -1328,7 +1382,7 @@ function AppNotice({
   onDismissInfo: () => void;
 }) {
   return (
-    <div className="app-notice" role="status">
+    <>
       {info && (
         <div className="notice-banner info">
           <p>{info}</p>
@@ -1380,7 +1434,7 @@ function AppNotice({
           </button>
         </div>
       )}
-    </div>
+    </>
   );
 }
 

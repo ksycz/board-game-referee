@@ -70,7 +70,7 @@ def evaluate_params(
 ) -> ParamResult:
     rulebook_id = f"tune-{top_k}-{chunk_max_chars}-{chunk_min_chars}"
     vs = VectorStore(chroma_dir=chroma_dir)
-    chunks, _, _ = extract_chunks(
+    chunks, _, _, _, _ = extract_chunks(
         pdf_path,
         max_chars=chunk_max_chars,
         min_chars=chunk_min_chars,

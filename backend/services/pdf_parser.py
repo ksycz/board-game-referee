@@ -176,6 +176,13 @@ def _extract_page_text_ocr(page: fitz.Page) -> str | None:
         return None
 
 
+def _page_is_thin(text: str, page_chunks: list[TextChunk]) -> bool:
+    """True when a page has little usable rules text for retrieval."""
+    if not page_chunks:
+        return True
+    return _page_needs_ocr(text, page_chunks)
+
+
 def _extract_page_chunks(
     page: fitz.Page,
     page_number: int,
@@ -184,7 +191,7 @@ def _extract_page_chunks(
     min_chars: int,
     total_pages: int = 0,
     on_progress: ProgressCallback | None = None,
-) -> tuple[list[TextChunk], bool]:
+) -> tuple[list[TextChunk], bool, str]:
     """Extract chunks for one page, optionally falling back to OCR."""
     text = _extract_page_text(page)
     page_chunks = chunk_page_text(
@@ -213,7 +220,7 @@ def _extract_page_chunks(
                 min_chars=min_chars,
             )
             used_ocr = True
-    return page_chunks, used_ocr
+    return page_chunks, used_ocr, text
 
 
 def _split_by_sentences(text: str, max_chars: int) -> list[str]:
@@ -357,15 +364,16 @@ def extract_chunks(
     max_chars: int = CHUNK_MAX_CHARS,
     min_chars: int = CHUNK_MIN_CHARS,
     on_progress: ProgressCallback | None = None,
-) -> tuple[list[TextChunk], int, int]:
+) -> tuple[list[TextChunk], int, int, int, list[int]]:
     """Extract searchable chunks from a PDF.
 
-    Returns (chunks, pages_with_text, ocr_pages).
+    Returns (chunks, total_pages, pages_indexed, ocr_pages, thin_pages).
     """
     doc = fitz.open(pdf_path)
     chunks: list[TextChunk] = []
-    pages_with_text = 0
+    pages_indexed = 0
     ocr_pages = 0
+    thin_pages: list[int] = []
     total_pages = len(doc)
     if OCR_FALLBACK:
         ensure_tesseract_path()
@@ -385,7 +393,7 @@ def extract_chunks(
                 },
             )
             page = doc[index]
-            page_chunks, used_ocr = _extract_page_chunks(
+            page_chunks, used_ocr, text = _extract_page_chunks(
                 page,
                 page_number,
                 max_chars=max_chars,
@@ -395,15 +403,17 @@ def extract_chunks(
             )
             if used_ocr:
                 ocr_pages += 1
+            if _page_is_thin(text, page_chunks):
+                thin_pages.append(page_number)
             if page_chunks:
-                pages_with_text += 1
+                pages_indexed += 1
                 chunks.extend(page_chunks)
     finally:
         doc.close()
-    return chunks, pages_with_text, ocr_pages
+    return chunks, total_pages, pages_indexed, ocr_pages, thin_pages
 
 
 def extract_pages(pdf_path: Path) -> list[TextChunk]:
     """Backward-compatible wrapper that returns chunks only."""
-    chunks, _, _ = extract_chunks(pdf_path)
+    chunks, _, _, _, _ = extract_chunks(pdf_path)
     return chunks

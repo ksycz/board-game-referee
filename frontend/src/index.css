@@ -345,6 +345,28 @@ body::after {
   line-height: 1.45;
 }
 
+.notice-banner.health-ok {
+  border-color: rgb(72 120 88 / 0.45);
+  background: rgb(72 120 88 / 0.12);
+}
+
+.notice-banner.health-warn {
+  border-color: rgb(180 130 40 / 0.45);
+  background: rgb(180 130 40 / 0.12);
+}
+
+.rulebook-health-list {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  color: var(--ink-muted);
+}
+
+.rulebook-health-list li + li {
+  margin-top: 0.2rem;
+}
+
 .notice-dismiss {
   flex-shrink: 0;
   display: grid;
@@ -693,16 +715,6 @@ body::after {
   font-size: 0.76rem;
   color: var(--ink-muted);
   line-height: 1.35;
-}
-
-.bgg-file-link {
-  font-size: 0.74rem;
-  color: var(--accent-glow);
-  text-decoration: none;
-}
-
-.bgg-file-link:hover {
-  text-decoration: underline;
 }
 
 .upload-btn-busy {
