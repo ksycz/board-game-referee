@@ -65,6 +65,19 @@ _STOP_WORDS = frozenset(
     }
 )
 
+_TERM_ALIASES: dict[str, list[str]] = {
+    "lucern": ["lantern"],
+    "lucerne": ["lantern"],
+    "meeple": ["token", "courtier", "piece"],
+    "meeples": ["token", "courtier", "piece"],
+    "pawn": ["token", "courtier", "piece"],
+    "pawns": ["token", "courtier", "piece"],
+    "piece": ["token", "courtier"],
+    "pieces": ["token", "courtier"],
+    "grab": ["take", "collect", "remove", "pick"],
+    "grabbing": ["take", "collect", "remove", "pick"],
+}
+
 
 def _query_terms(query: str) -> list[str]:
     terms: list[str] = []
@@ -86,7 +99,22 @@ def _query_terms(query: str) -> list[str]:
     if "type" in lowered:
         terms.append("type")
 
-    return list(dict.fromkeys(terms))
+    expanded: list[str] = []
+    for term in terms:
+        expanded.append(term)
+        expanded.extend(_TERM_ALIASES.get(term, []))
+
+    return list(dict.fromkeys(expanded))
+
+
+def _search_query_text(query: str) -> str:
+    """Augment the raw query with alias terms for vector search."""
+    terms = _query_terms(query)
+    base = {token.lower() for token in re.findall(r"\w+", query)}
+    extra = [term for term in terms if term not in base]
+    if not extra:
+        return query
+    return f"{query} {' '.join(extra)}"
 
 
 def _searchable_text(text: str, section_hint: str | None) -> str:
@@ -96,8 +124,8 @@ def _searchable_text(text: str, section_hint: str | None) -> str:
 
 
 def _term_matches(term: str, lowered: str) -> bool:
-    if len(term) <= 4:
-        if re.search(rf"\b{re.escape(term)}\b", lowered):
+    if len(term) <= 5:
+        if re.search(rf"\b{re.escape(term)}\w*\b", lowered):
             return True
         if term == "set" and "setup" in lowered:
             return True
@@ -213,7 +241,8 @@ class VectorStore:
         merged: dict[str, StoredChunk] = {}
 
         vector_n = min(max(top_k * 2, top_k), count)
-        result = collection.query(query_texts=[query], n_results=vector_n)
+        search_text = _search_query_text(query)
+        result = collection.query(query_texts=[search_text], n_results=vector_n)
         ids = result.get("ids", [[]])[0]
         documents = result.get("documents", [[]])[0]
         metadatas = result.get("metadatas", [[]])[0]
@@ -237,23 +266,12 @@ class VectorStore:
             all_documents = all_result.get("documents") or []
             all_metadatas = all_result.get("metadatas") or []
 
-            term_doc_freq: dict[str, int] = {}
-            for term in terms:
-                term_doc_freq[term] = sum(
-                    1
-                    for text, metadata in zip(all_documents, all_metadatas, strict=False)
-                    if _term_matches(
-                        term,
-                        _searchable_text(text, metadata.get("section_hint") or None).lower(),
-                    )
-                )
-
             for chunk_id, text, metadata in zip(
                 all_ids, all_documents, all_metadatas, strict=False
             ):
                 section_hint = metadata.get("section_hint") or None
                 searchable = _searchable_text(text, section_hint)
-                keyword_score = _keyword_score(searchable, terms, term_doc_freq)
+                keyword_score = _keyword_score(searchable, terms)
                 if keyword_score <= 0:
                     continue
 

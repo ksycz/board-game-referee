@@ -9,10 +9,19 @@ def test_query_terms_drop_stop_words():
     assert _query_terms("How do I set up the game?") == ["set", "setup"]
 
 
+def test_query_terms_expand_component_aliases():
+    terms = _query_terms("can I grab lucern meeple from the board whenever I want?")
+    assert "lantern" in terms
+    assert "token" in terms
+    assert "courtier" in terms
+    assert "take" in terms or "collect" in terms
+
+
 def test_keyword_score_matches_substrings():
     assert _keyword_score("BOARD SETUP: place the main board", ["set"]) == 1.0
     assert _keyword_score("If there is a tie, the winner is decided", ["tie", "happens"]) == 0.5
     assert _keyword_score("Perform the Courtier action", ["tie"]) == 0.0
+    assert _keyword_score("picking up 1 Lantern token from the board", ["pick", "lantern"]) == 1.0
 
 
 def test_search_boosts_keyword_matches(isolated_data):
@@ -35,6 +44,36 @@ def test_search_boosts_keyword_matches(isolated_data):
     assert len(hits) == 1
     assert hits[0].page == 20
     assert "tie" in hits[0].text.lower()
+
+
+def test_search_maps_informal_component_names(isolated_data):
+    vs = VectorStore()
+    rulebook_id = "lantern-book"
+    vs.index_rulebook(
+        rulebook_id,
+        [
+            TextChunk(page=1, text="Historical flavor and setup overview."),
+            TextChunk(
+                page=11,
+                text=(
+                    "During the Return Round, the players take turns picking up 1 Lantern token "
+                    "from the top of any stack on the main board and putting it on their own "
+                    "Domain board."
+                ),
+                section_hint="RETURN ROUND",
+            ),
+        ],
+    )
+
+    hits = vs.search(
+        rulebook_id,
+        "can I grab lucern meeple from the board whenever I want?",
+        top_k=1,
+    )
+
+    assert len(hits) == 1
+    assert hits[0].page == 11
+    assert "Lantern token" in hits[0].text
 
 
 def test_reindex_replaces_existing_chunks(isolated_data):

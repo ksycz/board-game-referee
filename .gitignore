@@ -5,6 +5,9 @@ __pycache__/
 backend/data/
 node_modules/
 frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+frontend/node_modules/playwright-core/.local-browsers/
 frontend/tsconfig.tsbuildinfo
 .DS_Store
 TODO.local.md

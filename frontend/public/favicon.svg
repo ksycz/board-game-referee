@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Rules Referee">
+  <rect width="32" height="32" rx="7" fill="#7a2838" />
+  <g
+    fill="none"
+    stroke="#f2ebe6"
+    stroke-width="2.25"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <path d="M16 6.5v15.5" />
+    <path d="M8.5 11h15" />
+    <path d="M8.5 11 6.5 17h4L8.5 11Z" fill="#f2ebe6" stroke="none" />
+    <path d="M23.5 11l-2 6h4l-2-6Z" fill="#f2ebe6" stroke="none" />
+    <path d="M11.5 24.5h9" />
+  </g>
+</svg>

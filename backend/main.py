@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import uuid
 from dataclasses import asdict
@@ -13,7 +14,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from agents.pipeline import RefereePipeline
-from config import CORS_ORIGINS, ensure_dirs
+from config import CORS_ORIGINS, DATA_DIR, MODEL, OCR_FALLBACK, ensure_dirs
+from services.pdf_parser import ensure_tesseract_path
 from services.rulebook_store import DuplicateRulebookError
 from services.upload_stream import stream_rulebook_upload
 
@@ -21,6 +23,11 @@ ensure_dirs()
 
 app = FastAPI(title="Board Game Rules Referee", version="0.1.0")
 pipeline = RefereePipeline()
+
+if os.getenv("E2E_STUB_LLM", "").strip().lower() in ("1", "true", "yes", "on"):
+    from e2e_stub import install_stub_referee
+
+    install_stub_referee(pipeline)
 
 FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 
@@ -108,7 +115,28 @@ async def upload_rulebook_stream(
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok"}
+    data_dir_writable = _data_dir_writable()
+    tesseract_installed = ensure_tesseract_path()
+    ocr_fallback_enabled = OCR_FALLBACK
+    return {
+        "status": "ok" if data_dir_writable else "degraded",
+        "model": MODEL,
+        "ocr_fallback_enabled": ocr_fallback_enabled,
+        "tesseract_installed": tesseract_installed,
+        "ocr_available": ocr_fallback_enabled and tesseract_installed,
+        "data_dir_writable": data_dir_writable,
+    }
+
+
+def _data_dir_writable() -> bool:
+    try:
+        ensure_dirs()
+        probe = DATA_DIR / ".health_write_probe"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        return True
+    except OSError:
+        return False
 
 
 @app.get("/api/rulebooks")
@@ -244,6 +272,26 @@ def dispute_rulebook(rulebook_id: str, body: DisputeRequest):
 
 if FRONTEND_DIR.exists():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIR / "assets"), name="assets")
+
+    _FAVICON_MEDIA = {
+        "favicon.ico": "image/x-icon",
+        "favicon.svg": "image/svg+xml",
+        "favicon-16.png": "image/png",
+        "favicon-32.png": "image/png",
+        "apple-touch-icon.png": "image/png",
+    }
+
+    for _name, _media in _FAVICON_MEDIA.items():
+        _path = FRONTEND_DIR / _name
+        if _path.is_file():
+
+            def _favicon_route(
+                file_path: Path = _path,
+                media_type: str = _media,
+            ):
+                return FileResponse(file_path, media_type=media_type)
+
+            app.get(f"/{_name}", include_in_schema=False)(_favicon_route)
 
     @app.get("/{full_path:path}")
     def spa(full_path: str):

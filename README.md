@@ -104,7 +104,7 @@ See **[USAGE.md](USAGE.md)** for upload, ask, dispute mode, citations, clarifica
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/health` | Health check |
+| `GET` | `/api/health` | Health check (`model`, `ocr_fallback_enabled`, `tesseract_installed`, `ocr_available`, `data_dir_writable`) |
 | `GET` | `/api/rulebooks` | List uploaded rulebooks (dedupes legacy copies) |
 | `POST` | `/api/rulebooks` | Upload PDF (`file`, optional `name`). Returns **409** if the same PDF is already in the library |
 | `DELETE` | `/api/rulebooks/{id}` | Remove a rulebook |
@@ -140,6 +140,21 @@ cd backend
 source .venv/bin/activate
 pytest
 ```
+
+### E2E smoke test (Playwright)
+
+Uploads the sample rulebook PDF, asks a question, and asserts a citation appears. Uses a stub referee (`E2E_STUB_LLM=1`) — no Anthropic API key required.
+
+```bash
+cd backend/tests/fixtures
+python make_sample_pdf.py   # once, if sample-rulebook.pdf is missing
+
+cd ../../frontend
+npm install
+npm run test:e2e
+```
+
+Playwright starts the backend (`scripts/e2e-backend.sh`) and Vite dev server automatically.
 
 ## Pre-commit
 

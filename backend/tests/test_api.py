@@ -28,7 +28,16 @@ def client(tmp_path, monkeypatch):
 def test_health(client):
     res = client.get("/api/health")
     assert res.status_code == 200
-    assert res.json() == {"status": "ok"}
+    body = res.json()
+    assert body["status"] == "ok"
+    assert body["model"]
+    assert isinstance(body["ocr_fallback_enabled"], bool)
+    assert isinstance(body["tesseract_installed"], bool)
+    assert isinstance(body["ocr_available"], bool)
+    assert body["ocr_available"] == (
+        body["ocr_fallback_enabled"] and body["tesseract_installed"]
+    )
+    assert body["data_dir_writable"] is True
 
 
 def test_upload_and_list(client, sample_pdf):
