@@ -671,8 +671,8 @@ body::after {
 }
 
 .app-in-session .chat {
-  min-height: calc(100vh - 5rem);
-  max-height: calc(100vh - 5rem);
+  min-height: calc(100vh - 3.75rem);
+  max-height: calc(100vh - 3.75rem);
 }
 
 .chat-composer {
@@ -814,7 +814,8 @@ body::after {
   color: var(--ink-muted);
 }
 
-.new-conversation {
+.new-conversation,
+.clear-faq-cache {
   flex-shrink: 0;
   padding: 0.4rem 0.75rem;
   border: 1px solid var(--border);
@@ -827,7 +828,8 @@ body::after {
   transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 
-.new-conversation:hover {
+.new-conversation:hover,
+.clear-faq-cache:hover {
   background: var(--surface-muted);
   border-color: var(--border-gold);
   color: var(--ink);
@@ -1845,16 +1847,83 @@ details pre {
   border: 1px solid var(--border);
 }
 
-.app-in-session .site-header {
-  margin-bottom: 0.65rem;
-  padding: 0.75rem 0.9rem;
+.app-in-session {
+  max-width: 1320px;
+  padding-top: 0.75rem;
+  padding-bottom: 1rem;
 }
 
-.app-in-session .brand-copy > p:last-child {
+.app-in-session .site-header {
+  margin-bottom: 0.5rem;
+  padding: 0.65rem 0.9rem;
+  align-items: center;
+}
+
+.app-in-session .brand-eyebrow,
+.app-in-session .brand-copy > p:last-child,
+.app-in-session .header-dice {
   display: none;
 }
 
+.app-in-session .brand-mark {
+  width: 2.75rem;
+  height: 2.75rem;
+}
+
+.app-in-session .brand-copy {
+  display: flex;
+  align-items: center;
+}
+
+.app-in-session .brand-copy h1 {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.app-in-session .table-rail-top {
+  margin-bottom: 0.5rem;
+}
+
+.app-in-session .layout {
+  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
+  gap: 0.85rem;
+  min-height: calc(100vh - 3.75rem);
+  align-items: stretch;
+}
+
+.app-in-session .sidebar {
+  top: 0.75rem;
+  max-height: calc(100vh - 3.75rem);
+  overflow-y: auto;
+}
+
+.app-in-session .chat {
+  min-height: calc(100vh - 3.75rem);
+  max-height: calc(100vh - 3.75rem);
+}
+
+.app-in-session .chat-header {
+  padding: 0.65rem 0.9rem 0.6rem;
+}
+
+.app-in-session .chat-header h2 {
+  font-size: 1.2rem;
+}
+
+.app-in-session .chat-subtitle {
+  display: none;
+}
+
+.app-in-session .messages {
+  padding-top: 0.85rem;
+}
+
 @media (max-width: 800px) {
+  .app-in-session {
+    padding-top: 0.35rem;
+    padding-bottom: 0;
+  }
+
   .app {
     padding: 0.75rem 0.75rem 0;
     padding-left: max(0.75rem, env(safe-area-inset-left));
@@ -1888,33 +1957,73 @@ details pre {
   }
 
   .app-in-session .site-header {
-    display: flex;
-    padding: 0.55rem 0.75rem;
-    margin-bottom: 0.35rem;
-  }
-
-  .app-in-session .brand-eyebrow,
-  .app-in-session .brand-copy > p:last-child,
-  .app-in-session .header-dice {
     display: none;
   }
 
-  .app-in-session .brand-mark {
-    width: 2.15rem;
-    height: 2.15rem;
-  }
-
-  .app-in-session .brand-copy h1 {
-    font-size: 1.15rem;
-  }
-
   .app-in-session .table-rail-top {
-    margin-bottom: 0.5rem;
+    display: none;
+  }
+
+  .app-in-session .layout {
+    min-height: calc(100dvh - 0.5rem);
   }
 
   .app-in-session .chat {
-    min-height: calc(100dvh - 1.5rem);
-    max-height: calc(100dvh - 1.5rem);
+    min-height: calc(100dvh - 0.5rem);
+    max-height: calc(100dvh - 0.5rem);
+  }
+
+  .app-in-session .mobile-game-bar {
+    padding: 0.5rem 0.75rem;
+  }
+
+  .app-in-session .chat-header {
+    padding: 0.55rem 0.75rem;
+  }
+
+  .app-in-session .chat-header-title {
+    display: none;
+  }
+
+  .app-in-session .chat-header-row {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .app-in-session .chat-header-actions {
+    width: 100%;
+    flex-wrap: nowrap;
+    gap: 0.45rem;
+  }
+
+  .app-in-session .mode-toggle {
+    width: auto;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .app-in-session .mode-toggle button {
+    min-height: 2.5rem;
+    padding: 0.45rem 0.65rem;
+  }
+
+  .app-in-session .chat-header-tools {
+    width: auto;
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  .app-in-session .new-conversation,
+  .app-in-session .clear-faq-cache {
+    min-height: 2.5rem;
+    padding: 0.45rem 0.7rem;
+    font-size: 0.76rem;
+  }
+
+  .app-in-session .messages {
+    padding: 0.75rem;
+    padding-bottom: 0.35rem;
   }
 
   .sidebar-backdrop {
@@ -1993,9 +2102,22 @@ details pre {
     background: var(--surface-card);
   }
 
+  .app-in-session .mobile-game-bar {
+    align-items: center;
+  }
+
+  .app-in-session .mobile-app-brand {
+    line-height: 1.1;
+  }
+
+  .app-in-session .mobile-game-name {
+    line-height: 1.15;
+  }
+
   .mobile-game-meta {
     display: flex;
     flex-direction: column;
+    justify-content: center;
     gap: 0.1rem;
     min-width: 0;
     flex: 1;
@@ -2101,7 +2223,8 @@ details pre {
     font-size: 0.85rem;
   }
 
-  .new-conversation {
+  .new-conversation,
+  .clear-faq-cache {
     min-height: 2.75rem;
     padding: 0.55rem 1rem;
     font-size: 0.85rem;

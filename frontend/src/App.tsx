@@ -29,7 +29,6 @@ import {
   IconDice,
   IconLibrary,
   IconMenu,
-  IconMore,
   IconPin,
   IconScales,
   IconShare,
@@ -643,15 +642,19 @@ export default function App() {
                       <button
                         type="button"
                         className="new-conversation"
+                        onClick={() => clearConversation(selected.id)}
+                      >
+                        New conversation
+                      </button>
+                      <button
+                        type="button"
+                        className="clear-faq-cache"
                         onClick={() => {
                           void handleClearFaqCache(selected.id, selected.name);
                         }}
                       >
                         Clear FAQ cache
                       </button>
-                      {messages.length > 0 && (
-                        <ChatActionsMenu onNewConversation={() => clearConversation(selected.id)} />
-                      )}
                     </div>
                   </div>
                 </div>
@@ -945,27 +948,6 @@ function AppNotice({
         </div>
       )}
     </div>
-  );
-}
-
-function ChatActionsMenu({ onNewConversation }: { onNewConversation: () => void }) {
-  return (
-    <details className="chat-actions-menu">
-      <summary className="chat-toolbar-btn" aria-label="More actions">
-        <IconMore className="icon icon-sm" />
-      </summary>
-      <div className="chat-actions-panel">
-        <button
-          type="button"
-          onClick={(event) => {
-            onNewConversation();
-            event.currentTarget.closest("details")?.removeAttribute("open");
-          }}
-        >
-          New conversation
-        </button>
-      </div>
-    </details>
   );
 }
 
