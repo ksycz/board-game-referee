@@ -663,6 +663,58 @@ body::after {
   color: var(--accent);
 }
 
+.recent-exchanges-hint {
+  margin: -0.35rem 0 0.65rem;
+  font-size: 0.8rem;
+}
+
+.recent-exchange-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.recent-exchange-btn {
+  display: grid;
+  gap: 0.2rem;
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.recent-exchange-btn:hover {
+  border-color: var(--border-gold);
+  background: var(--surface-muted);
+}
+
+.recent-exchange-mode {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent-glow);
+}
+
+.recent-exchange-label {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: 0.84rem;
+  line-height: 1.35;
+  color: var(--ink-muted);
+}
+
 .chat {
   display: flex;
   flex-direction: column;
@@ -1110,21 +1162,12 @@ body::after {
   border-radius: inherit;
 }
 
-.referee-stamp {
-  display: inline-flex;
+.ruling-labels {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.4rem;
-  margin-bottom: 0.55rem;
-  padding: 0.2rem 0.6rem 0.2rem 0.4rem;
-  border-radius: var(--radius-pill);
-  background: rgb(122 40 56 / 0.1);
-  border: 1px solid var(--border-gold);
-  font-family: var(--font-mono);
-  font-size: 0.62rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: var(--accent-glow);
+  gap: 0.45rem;
+  margin-bottom: 0.5rem;
 }
 
 .ruling {
@@ -1141,12 +1184,6 @@ body::after {
   color: var(--ink-muted);
   margin: 0 0 0.75rem;
   font-size: 0.92rem;
-}
-
-.ruling-header {
-  display: flex;
-  gap: 0.45rem;
-  flex-wrap: wrap;
 }
 
 .confidence-hint {
@@ -1197,6 +1234,9 @@ body::after {
 }
 
 .badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
   font-family: var(--font-mono);
   font-size: 0.58rem;
   font-weight: 600;
@@ -1954,6 +1994,11 @@ details pre {
   .layout {
     grid-template-columns: 1fr;
     min-height: calc(100dvh - 5.5rem);
+    min-width: 0;
+  }
+
+  .chat {
+    min-width: 0;
   }
 
   .app-in-session .site-header {
@@ -1965,12 +2010,21 @@ details pre {
   }
 
   .app-in-session .layout {
+    grid-template-columns: 1fr;
     min-height: calc(100dvh - 0.5rem);
+  }
+
+  .app-in-session .sidebar {
+    position: fixed;
+    top: 0;
+    max-height: none;
   }
 
   .app-in-session .chat {
     min-height: calc(100dvh - 0.5rem);
     max-height: calc(100dvh - 0.5rem);
+    width: 100%;
+    min-width: 0;
   }
 
   .app-in-session .mobile-game-bar {
@@ -1986,20 +2040,20 @@ details pre {
   }
 
   .app-in-session .chat-header-row {
-    flex-direction: row;
-    align-items: center;
+    flex-direction: column;
+    align-items: stretch;
     gap: 0.5rem;
   }
 
   .app-in-session .chat-header-actions {
     width: 100%;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     gap: 0.45rem;
   }
 
   .app-in-session .mode-toggle {
-    width: auto;
-    flex: 1 1 auto;
+    width: 100%;
+    flex: 1 1 100%;
     min-width: 0;
   }
 
@@ -2009,9 +2063,12 @@ details pre {
   }
 
   .app-in-session .chat-header-tools {
-    width: auto;
-    flex: 0 1 auto;
+    width: 100%;
+    flex: 1 1 100%;
     min-width: 0;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 0.45rem;
   }
 
   .app-in-session .new-conversation,
@@ -2187,6 +2244,7 @@ details pre {
 
   .chat {
     min-height: calc(100dvh - 5.5rem);
+    min-width: 0;
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   }
 

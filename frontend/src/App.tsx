@@ -36,13 +36,24 @@ import {
   IconThumbUp,
   IconUpload,
 } from "./Icons";
+import {
+  appendExchange,
+  getHistoryExchange,
+  listRecentExchanges,
+  loadAllHistory,
+  loadAllThreads,
+  MAX_STORED_EXCHANGES,
+  removeRulebookStorage,
+  saveHistory,
+  saveThread,
+  trimThread,
+  type HistoryExchange,
+  type StoredMessage,
+} from "./conversationStorage";
 
 type ChatMode = "ask" | "dispute";
 
-type Message =
-  | { role: "user"; text: string }
-  | { role: "dispute"; situation: string; playerA: string; playerB: string }
-  | { role: "referee"; data: AskResponse };
+type Message = StoredMessage;
 
 type ClarificationContext = {
   originalQuestion: string;
@@ -101,7 +112,8 @@ function visibleRulebooks(
 export default function App() {
   const [rulebooks, setRulebooks] = useState<Rulebook[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [threads, setThreads] = useState<Record<string, Message[]>>({});
+  const [threads, setThreads] = useState<Record<string, Message[]>>(() => loadAllThreads());
+  const [history, setHistory] = useState<Record<string, HistoryExchange[]>>(() => loadAllHistory());
   const [clarifications, setClarifications] = useState<Record<string, ClarificationContext | null>>({});
   const [examples, setExamples] = useState<Record<string, string[]>>({});
   const [question, setQuestion] = useState("");
@@ -133,12 +145,17 @@ export default function App() {
   const messages = selectedId ? threads[selectedId] ?? [] : [];
   const clarification = selectedId ? clarifications[selectedId] ?? null : null;
   const exampleQuestions = selectedId ? examples[selectedId] ?? [] : [];
+  const recentExchanges = selectedId ? listRecentExchanges(history[selectedId] ?? []) : [];
 
   const updateThread = useCallback((rulebookId: string, updater: (prev: Message[]) => Message[]) => {
-    setThreads((current) => ({
-      ...current,
-      [rulebookId]: updater(current[rulebookId] ?? []),
-    }));
+    setThreads((current) => {
+      const nextMessages = trimThread(updater(current[rulebookId] ?? []));
+      saveThread(rulebookId, nextMessages);
+      return {
+        ...current,
+        [rulebookId]: nextMessages,
+      };
+    });
   }, []);
 
   const setClarificationFor = useCallback((rulebookId: string, value: ClarificationContext | null) => {
@@ -158,6 +175,29 @@ export default function App() {
     refresh()
       .then((books) => {
         setSelectedId((current) => current ?? books[0]?.id ?? null);
+        const bookIds = new Set(books.map((book) => book.id));
+        setThreads((current) => {
+          const next: Record<string, Message[]> = {};
+          for (const [rulebookId, thread] of Object.entries(current)) {
+            if (bookIds.has(rulebookId)) {
+              next[rulebookId] = thread;
+            } else {
+              removeRulebookStorage(rulebookId);
+            }
+          }
+          return next;
+        });
+        setHistory((current) => {
+          const next: Record<string, HistoryExchange[]> = {};
+          for (const [rulebookId, entries] of Object.entries(current)) {
+            if (bookIds.has(rulebookId)) {
+              next[rulebookId] = entries;
+            } else {
+              saveHistory(rulebookId, []);
+            }
+          }
+          return next;
+        });
       })
       .catch((e) => setError(String(e)));
   }, [refresh]);
@@ -213,6 +253,18 @@ export default function App() {
   }, [selectedId, examples]);
 
   const selected = rulebooks.find((b) => b.id === selectedId);
+
+  function openHistoryExchange(rulebookId: string, exchangeId: string) {
+    const entry = getHistoryExchange(rulebookId, exchangeId);
+    if (!entry) {
+      return;
+    }
+    setThreads((current) => {
+      saveThread(rulebookId, entry.messages);
+      return { ...current, [rulebookId]: entry.messages };
+    });
+    setClarificationFor(rulebookId, null);
+  }
 
   function clearConversation(rulebookId: string) {
     updateThread(rulebookId, () => []);
@@ -288,7 +340,22 @@ export default function App() {
       } else {
         setClarificationFor(selectedId, null);
       }
-      updateThread(selectedId, (current) => [...current, { role: "referee", data: answer }]);
+      const threadWithRuling = trimThread([
+        ...messages,
+        { role: "user", text: trimmed },
+        { role: "referee", data: answer },
+      ]);
+      setThreads((current) => {
+        saveThread(selectedId, threadWithRuling);
+        return { ...current, [selectedId]: threadWithRuling };
+      });
+      const entry = appendExchange(selectedId, threadWithRuling);
+      if (entry) {
+        setHistory((current) => ({
+          ...current,
+          [selectedId]: [...(current[selectedId] ?? []), entry].slice(-MAX_STORED_EXCHANGES),
+        }));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -336,7 +403,22 @@ export default function App() {
       } else {
         setClarificationFor(selectedId, null);
       }
-      updateThread(selectedId, (current) => [...current, { role: "referee", data: answer }]);
+      const threadWithRuling = trimThread([
+        ...messages,
+        { role: "dispute", situation, playerA, playerB },
+        { role: "referee", data: answer },
+      ]);
+      setThreads((current) => {
+        saveThread(selectedId, threadWithRuling);
+        return { ...current, [selectedId]: threadWithRuling };
+      });
+      const entry = appendExchange(selectedId, threadWithRuling);
+      if (entry) {
+        setHistory((current) => ({
+          ...current,
+          [selectedId]: [...(current[selectedId] ?? []), entry].slice(-MAX_STORED_EXCHANGES),
+        }));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -378,7 +460,13 @@ export default function App() {
     setError(null);
     try {
       await deleteRulebook(id);
+      removeRulebookStorage(id);
       setThreads((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
+      setHistory((current) => {
         const next = { ...current };
         delete next[id];
         return next;
@@ -569,6 +657,36 @@ export default function App() {
               </button>
             )}
           </section>
+
+          {selected && recentExchanges.length > 0 && (
+            <section className="panel-section recent-exchanges">
+              <h2 className="panel-title">
+                <span className="panel-title-icon">
+                  <IconScales className="icon" />
+                </span>
+                Recent rulings
+              </h2>
+              <p className="recent-exchanges-hint muted">
+                Last {recentExchanges.length} saved for this game.
+              </p>
+              <ul className="recent-exchange-list">
+                {recentExchanges.map((exchange) => (
+                  <li key={`${selected.id}-${exchange.id}`}>
+                    <button
+                      type="button"
+                      className="recent-exchange-btn"
+                      onClick={() => openHistoryExchange(selected.id, exchange.id)}
+                    >
+                      <span className="recent-exchange-mode">
+                        {exchange.mode === "dispute" ? "Dispute" : "Ask"}
+                      </span>
+                      <span className="recent-exchange-label">{exchange.label}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
         </aside>
 
         <main className="chat panel">
@@ -690,12 +808,12 @@ export default function App() {
                 )}
                 {messages.map((msg, i) =>
                   msg.role === "user" ? (
-                    <div key={i} className="message-wrap user">
+                    <div key={i} id={`message-${i}`} className="message-wrap user">
                       <span className="message-label">You</span>
                       <div className="bubble user">{msg.text}</div>
                     </div>
                   ) : msg.role === "dispute" ? (
-                    <div key={i} className="message-wrap dispute">
+                    <div key={i} id={`message-${i}`} className="message-wrap dispute">
                       <span className="message-label">Dispute</span>
                       <div className="bubble dispute">
                         <p className="dispute-field">
@@ -713,7 +831,7 @@ export default function App() {
                       </div>
                     </div>
                   ) : (
-                    <div key={i} className="message-wrap referee">
+                    <div key={i} id={`message-${i}`} className="message-wrap referee">
                       <span className="message-label">Referee</span>
                       <RefereeAnswer rulebookId={selected.id} data={msg.data} />
                     </div>
@@ -848,30 +966,30 @@ function RefereeAnswer({
 
   return (
     <div className={`bubble referee${needsInput ? " needs-clarification" : ""}`}>
-      <div className="referee-stamp" aria-hidden="true">
-        <IconScales className="icon icon-xs" />
-        {isDispute ? "Dispute ruling" : "House ruling"}
+      <div className="ruling-labels">
+        {needsInput ? (
+          <span className="badge clarify">Needs your input</span>
+        ) : (
+          <>
+            {data.cached && <span className="badge cache">From cache</span>}
+            {isDispute && ruling.favors && (
+              <span className={`badge favors favors-${ruling.favors}`}>
+                {favorsLabel(ruling.favors)}
+              </span>
+            )}
+            <span className={`badge ${ruling.confidence}`}>{ruling.confidence} confidence</span>
+            {!citation_check.all_valid && !confidenceHint && (
+              <span className="badge warn">citations need review</span>
+            )}
+          </>
+        )}
       </div>
       {needsInput ? (
         <div className="clarification-callout">
-          <span className="badge clarify">Needs your input</span>
           <p className="clarification-question">{ruling.clarification_question}</p>
           <p className="clarification-hint">Reply below with the missing detail to get a final ruling.</p>
         </div>
-      ) : (
-        <div className="ruling-header">
-          {data.cached && <span className="badge cache">From cache</span>}
-          {isDispute && ruling.favors && (
-            <span className={`badge favors favors-${ruling.favors}`}>
-              {favorsLabel(ruling.favors)}
-            </span>
-          )}
-          <span className={`badge ${ruling.confidence}`}>{ruling.confidence} confidence</span>
-          {!citation_check.all_valid && !confidenceHint && (
-            <span className="badge warn">citations need review</span>
-          )}
-        </div>
-      )}
+      ) : null}
 
       {!needsInput && confidenceHint && (
         <ConfidenceHint hint={confidenceHint} />
