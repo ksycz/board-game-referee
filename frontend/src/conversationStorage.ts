@@ -16,12 +16,14 @@ export type HistoryExchange = {
   mode: "ask" | "dispute";
   messages: StoredMessage[];
   createdAt: string;
+  pinned?: boolean;
 };
 
 export type RecentExchange = {
   id: string;
   label: string;
   mode: "ask" | "dispute";
+  pinned?: boolean;
 };
 
 function isStoredMessage(value: unknown): value is StoredMessage {
@@ -189,7 +191,10 @@ function parseHistory(parsed: Record<string, unknown> | null): Record<string, Hi
     if (!Array.isArray(value)) {
       continue;
     }
-    const entries = value.filter(isHistoryExchange);
+    const entries = value.filter(isHistoryExchange).map((entry) => ({
+      ...entry,
+      pinned: Boolean(entry.pinned),
+    }));
     if (entries.length > 0) {
       history[rulebookId] = trimHistory(entries);
     }
@@ -265,6 +270,15 @@ export function appendExchange(
 
   const all = loadAllHistory();
   const current = all[rulebookId] ?? [];
+  const last = current[current.length - 1];
+  if (
+    last
+    && last.label === entry.label
+    && last.mode === entry.mode
+    && Date.now() - Date.parse(last.createdAt) < 5000
+  ) {
+    return last;
+  }
   const next = trimHistory([...current, entry]);
   all[rulebookId] = next;
   saveAllHistory(all);
@@ -279,17 +293,64 @@ export function getHistoryExchange(
   return entries.find((entry) => entry.id === exchangeId) ?? null;
 }
 
+export function removeHistoryExchange(rulebookId: string, exchangeId: string): boolean {
+  const all = loadAllHistory();
+  const current = all[rulebookId] ?? [];
+  const next = current.filter((entry) => entry.id !== exchangeId);
+  if (next.length === current.length) {
+    return false;
+  }
+  if (next.length === 0) {
+    delete all[rulebookId];
+  } else {
+    all[rulebookId] = next;
+  }
+  saveAllHistory(all);
+  return true;
+}
+
+export function clearHistory(rulebookId: string): void {
+  saveHistory(rulebookId, []);
+}
+
+export function sortHistoryExchanges(entries: HistoryExchange[]): HistoryExchange[] {
+  return [...entries].sort((left, right) => {
+    const leftPinned = left.pinned ? 1 : 0;
+    const rightPinned = right.pinned ? 1 : 0;
+    if (leftPinned !== rightPinned) {
+      return rightPinned - leftPinned;
+    }
+    return right.createdAt.localeCompare(left.createdAt);
+  });
+}
+
 export function removeRulebookStorage(rulebookId: string): void {
   saveThread(rulebookId, []);
   saveHistory(rulebookId, []);
 }
 
+export function setHistoryExchangePinned(
+  rulebookId: string,
+  exchangeId: string,
+  pinned: boolean,
+): boolean {
+  const all = loadAllHistory();
+  const current = all[rulebookId] ?? [];
+  const index = current.findIndex((entry) => entry.id === exchangeId);
+  if (index === -1) {
+    return false;
+  }
+  current[index] = { ...current[index], pinned };
+  all[rulebookId] = current;
+  saveAllHistory(all);
+  return true;
+}
+
 export function listRecentExchanges(entries: HistoryExchange[]): RecentExchange[] {
-  return [...entries]
-    .reverse()
-    .map((entry) => ({
-      id: entry.id,
-      label: entry.label,
-      mode: entry.mode,
-    }));
+  return sortHistoryExchanges(entries).map((entry) => ({
+    id: entry.id,
+    label: entry.label,
+    mode: entry.mode,
+    pinned: Boolean(entry.pinned),
+  }));
 }

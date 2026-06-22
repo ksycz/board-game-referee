@@ -9,7 +9,10 @@ import fitz
 
 def render_page_png(pdf_path: Path, page: int, *, zoom: float = 1.5) -> bytes:
     """Return a PNG image for a 1-based PDF page number."""
-    doc = fitz.open(pdf_path)
+    try:
+        doc = fitz.open(pdf_path)
+    except Exception as exc:
+        raise ValueError(f"Could not open PDF: {exc}") from exc
     try:
         if page < 1 or page > len(doc):
             raise ValueError(f"Page {page} out of range (1-{len(doc)})")

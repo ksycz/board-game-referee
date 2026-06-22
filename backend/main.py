@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import re
 import uuid
 from dataclasses import asdict
 from pathlib import Path
@@ -22,6 +21,7 @@ from services.bgg_upload_stream import stream_bgg_rulebook_upload
 from services.rulebook_store import DuplicateRulebookError
 from services.reindex_stream import stream_rulebook_reindex
 from services.upload_stream import stream_rulebook_upload
+from services.upload_utils import ensure_pdf_size, safe_stored_filename
 
 ensure_dirs()
 
@@ -102,8 +102,7 @@ class BggImportRequest(BaseModel):
 
 
 def _safe_filename(name: str) -> str:
-    base = re.sub(r"[^\w.\-]+", "_", name).strip("._")
-    return base or "rulebook.pdf"
+    return safe_stored_filename(name)
 
 
 async def _read_upload_pdf(file: UploadFile) -> tuple[bytes, str]:
@@ -113,6 +112,10 @@ async def _read_upload_pdf(file: UploadFile) -> tuple[bytes, str]:
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="Empty file")
+    try:
+        ensure_pdf_size(content)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return content, file.filename
 
 
@@ -147,6 +150,8 @@ def bgg_lookup(body: BggLookupRequest):
         return lookup_rulebooks(body.url)
     except BggError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Could not look up game on BoardGameGeek: {exc}") from exc
 
 
 @app.post("/api/rulebooks/bgg/upload-stream")

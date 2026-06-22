@@ -132,11 +132,16 @@ class RefereePipeline:
         pdf_path.write_bytes(pdf_bytes)
 
         book.name = derive_game_name(pdf_path, original_filename, name)
-        ingest_result = self.ingestion.ingest(
-            book.id,
-            pdf_path,
-            on_progress=on_progress,
-        )
+        try:
+            ingest_result = self.ingestion.ingest(
+                book.id,
+                pdf_path,
+                on_progress=on_progress,
+            )
+        except Exception:
+            self.vector_store.delete_rulebook(book.id)
+            self.store.delete(book.id)
+            raise
         book.page_count = ingest_result["pages_extracted"]
         self.store._save()
 

@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from config import RULEBOOKS_DIR, ensure_dirs
+from services.upload_utils import safe_stored_filename
 from services.game_name import (
     extract_game_name_from_pdf,
     looks_like_filename,
@@ -25,6 +26,16 @@ class DuplicateRulebookError(Exception):
     def __init__(self, existing: Rulebook) -> None:
         self.existing = existing
         super().__init__(f'Rulebook "{existing.name}" is already in your library.')
+
+
+def resolve_rulebook_pdf_path(filename: str) -> Path:
+    """Resolve a stored filename to an absolute path inside RULEBOOKS_DIR."""
+    safe_name = safe_stored_filename(filename)
+    path = (RULEBOOKS_DIR / safe_name).resolve()
+    root = RULEBOOKS_DIR.resolve()
+    if path != root and root not in path.parents:
+        raise ValueError(f"Invalid rulebook filename: {filename}")
+    return path
 
 
 @dataclass
@@ -64,7 +75,7 @@ class RulebookStore:
         for book in self._rulebooks.values():
             if book.content_hash:
                 continue
-            pdf_path = RULEBOOKS_DIR / book.filename
+            pdf_path = resolve_rulebook_pdf_path(book.filename)
             if not pdf_path.exists():
                 continue
             book.content_hash = pdf_content_hash(pdf_path.read_bytes())
@@ -85,7 +96,7 @@ class RulebookStore:
         for book in self._rulebooks.values():
             if not looks_like_filename(book.name):
                 continue
-            pdf_path = RULEBOOKS_DIR / book.filename
+            pdf_path = resolve_rulebook_pdf_path(book.filename)
             if not pdf_path.exists():
                 continue
             resolved = extract_game_name_from_pdf(pdf_path)
@@ -124,7 +135,7 @@ class RulebookStore:
         book = Rulebook(
             id=str(uuid.uuid4()),
             name=name,
-            filename=filename,
+            filename=safe_stored_filename(filename),
             page_count=page_count,
             created_at=datetime.now(UTC).isoformat(),
             content_hash=content_hash,
@@ -137,7 +148,7 @@ class RulebookStore:
         book = self._rulebooks.pop(rulebook_id, None)
         if not book:
             return False
-        pdf_path = RULEBOOKS_DIR / book.filename
+        pdf_path = resolve_rulebook_pdf_path(book.filename)
         if pdf_path.exists():
             pdf_path.unlink()
         self._save()
@@ -147,4 +158,4 @@ class RulebookStore:
         book = self.get(rulebook_id)
         if not book:
             raise KeyError(rulebook_id)
-        return RULEBOOKS_DIR / book.filename
+        return resolve_rulebook_pdf_path(book.filename)

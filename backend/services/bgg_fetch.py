@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from config import BGG_API_TOKEN
+from services.upload_utils import ensure_pdf_size
 
 BGG_BASE = "https://boardgamegeek.com"
 BGG_FILES_API = f"{BGG_BASE}/api/files"
@@ -204,6 +205,11 @@ def download_rulebook_pdf(
             "Open the file in your browser, download the PDF, then upload it here.",
             bgg_url=help_url,
         )
+
+    try:
+        ensure_pdf_size(data)
+    except ValueError as exc:
+        raise BggError(str(exc)) from exc
 
     if "pdf" not in content_type.lower() and filename_hint and not filename_hint.lower().endswith(".pdf"):
         raise BggDownloadError(

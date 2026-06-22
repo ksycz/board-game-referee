@@ -326,7 +326,12 @@ function parseSseChunk(buffer: string): { events: UploadStreamEvent[]; rest: str
     }
     if (!dataLine) continue;
 
-    const payload = JSON.parse(dataLine) as Record<string, unknown>;
+    let payload: Record<string, unknown>;
+    try {
+      payload = JSON.parse(dataLine) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
     if (eventName === "progress") {
       events.push({
         type: "progress",

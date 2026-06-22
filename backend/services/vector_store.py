@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import re
 import uuid
 from dataclasses import dataclass
@@ -173,7 +174,9 @@ class SimpleEmbeddingFunction(EmbeddingFunction):
     def _embed(self, text: str) -> list[float]:
         vec = [0.0] * _DIM
         for token in re.findall(r"\w+", text.lower()):
-            vec[hash(token) % _DIM] += 1.0
+            digest = hashlib.blake2b(token.encode("utf-8"), digest_size=8).digest()
+            bucket = int.from_bytes(digest, "big") % _DIM
+            vec[bucket] += 1.0
         norm = sum(v * v for v in vec) ** 0.5 or 1.0
         return [v / norm for v in vec]
 
@@ -205,12 +208,12 @@ class VectorStore:
         )
 
     def index_rulebook(self, rulebook_id: str, chunks: list[TextChunk]) -> int:
+        if not chunks:
+            return self._collection(rulebook_id).count()
+
         collection = self._collection(rulebook_id)
         if collection.count() > 0:
             self.delete_rulebook(rulebook_id)
-
-        if not chunks:
-            return 0
 
         collection = self._collection(rulebook_id)
         ids: list[str] = []

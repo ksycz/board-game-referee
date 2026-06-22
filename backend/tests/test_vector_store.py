@@ -161,3 +161,17 @@ def test_search_deprioritizes_very_short_chunks(isolated_data):
 
     assert len(hits) == 1
     assert "choose one action" in hits[0].text.lower()
+
+
+def test_index_rulebook_empty_chunks_preserves_existing_index(isolated_data):
+    vs = VectorStore()
+    rulebook_id = "preserve-book"
+    vs.index_rulebook(
+        rulebook_id,
+        [TextChunk(page=3, text="When you discard a card, draw another from the deck.")],
+    )
+
+    assert vs.index_rulebook(rulebook_id, []) == 1
+    hits = vs.keyword_search(rulebook_id, "discard card", top_k=1)
+    assert len(hits) == 1
+    assert hits[0].page == 3

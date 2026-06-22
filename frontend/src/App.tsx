@@ -52,16 +52,19 @@ import {
 } from "./Icons";
 import {
   appendExchange,
+  clearHistory,
   getHistoryExchange,
   listRecentExchanges,
   loadAllHistory,
   loadAllThreads,
-  MAX_STORED_EXCHANGES,
+  setHistoryExchangePinned,
+  removeHistoryExchange,
   removeRulebookStorage,
   saveHistory,
   saveThread,
   trimThread,
   type HistoryExchange,
+  type RecentExchange,
   type StoredMessage,
 } from "./conversationStorage";
 
@@ -102,7 +105,7 @@ function buildHistory(messages: Message[]): HistoryMessage[] {
   });
 }
 
-const RULEBOOKS_PREVIEW_LIMIT = 5;
+const SIDEBAR_LIST_PREVIEW_LIMIT = 5;
 
 function sortRulebooks(books: Rulebook[]): Rulebook[] {
   return [...books].sort((left, right) => {
@@ -121,19 +124,29 @@ function visibleRulebooks(
   showAll: boolean,
 ): Rulebook[] {
   const ordered = sortRulebooks(books);
-  if (showAll || ordered.length <= RULEBOOKS_PREVIEW_LIMIT) {
+  if (showAll || ordered.length <= SIDEBAR_LIST_PREVIEW_LIMIT) {
     return ordered;
   }
 
-  const preview = ordered.slice(0, RULEBOOKS_PREVIEW_LIMIT);
+  const preview = ordered.slice(0, SIDEBAR_LIST_PREVIEW_LIMIT);
   if (selectedId && !preview.some((book) => book.id === selectedId)) {
     const selected = ordered.find((book) => book.id === selectedId);
     if (selected) {
-      return [...ordered.slice(0, RULEBOOKS_PREVIEW_LIMIT - 1), selected];
+      return [...ordered.slice(0, SIDEBAR_LIST_PREVIEW_LIMIT - 1), selected];
     }
   }
 
   return preview;
+}
+
+function visibleRecentExchanges(
+  exchanges: RecentExchange[],
+  showAll: boolean,
+): RecentExchange[] {
+  if (showAll || exchanges.length <= SIDEBAR_LIST_PREVIEW_LIMIT) {
+    return exchanges;
+  }
+  return exchanges.slice(0, SIDEBAR_LIST_PREVIEW_LIMIT);
 }
 
 const SIDEBAR_COLLAPSED_KEY = "rules-referee:v1:sidebar-collapsed";
@@ -204,6 +217,7 @@ export default function App() {
   const [quickSearchLoading, setQuickSearchLoading] = useState(false);
   const [quickSearchSelected, setQuickSearchSelected] = useState<number | null>(null);
   const [showAllRulebooks, setShowAllRulebooks] = useState(false);
+  const [showAllRecentExchanges, setShowAllRecentExchanges] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => loadSidebarCollapsed());
   const [overlayDismissTick, setOverlayDismissTick] = useState(0);
@@ -211,10 +225,19 @@ export default function App() {
   const quickSearchInputRef = useRef<HTMLInputElement>(null);
   const disputeSituationRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const loadingRef = useRef(false);
+  const activeRequestRulebookRef = useRef<string | null>(null);
 
   function selectRulebook(id: string) {
+    if (loadingRef.current || id === selectedId) {
+      if (id === selectedId) {
+        setLibraryOpen(false);
+      }
+      return;
+    }
     setSelectedId(id);
     setLibraryOpen(false);
+    clearConversation(id);
   }
 
   const showLibraryPanel = useCallback(() => {
@@ -231,12 +254,16 @@ export default function App() {
   const displayedRulebooks = visibleRulebooks(rulebooks, selectedId, showAllRulebooks);
   const hiddenRulebookCount = showAllRulebooks
     ? 0
-    : Math.max(0, rulebooks.length - RULEBOOKS_PREVIEW_LIMIT);
+    : Math.max(0, rulebooks.length - SIDEBAR_LIST_PREVIEW_LIMIT);
 
   const messages = selectedId ? threads[selectedId] ?? [] : [];
   const clarification = selectedId ? clarifications[selectedId] ?? null : null;
   const exampleQuestions = selectedId ? examples[selectedId] ?? [] : [];
   const recentExchanges = selectedId ? listRecentExchanges(history[selectedId] ?? []) : [];
+  const displayedRecentExchanges = visibleRecentExchanges(recentExchanges, showAllRecentExchanges);
+  const hiddenRecentCount = showAllRecentExchanges
+    ? 0
+    : Math.max(0, recentExchanges.length - SIDEBAR_LIST_PREVIEW_LIMIT);
 
   const updateThread = useCallback((rulebookId: string, updater: (prev: Message[]) => Message[]) => {
     setThreads((current) => {
@@ -253,6 +280,15 @@ export default function App() {
     setClarifications((current) => ({
       ...current,
       [rulebookId]: value,
+    }));
+  }, []);
+
+  const persistThreadAndHistory = useCallback((rulebookId: string, threadWithRuling: Message[]) => {
+    saveThread(rulebookId, threadWithRuling);
+    appendExchange(rulebookId, threadWithRuling);
+    setHistory((hist) => ({
+      ...hist,
+      [rulebookId]: loadAllHistory()[rulebookId] ?? [],
     }));
   }, []);
 
@@ -314,6 +350,7 @@ export default function App() {
     setQuickSearchHits(null);
     setQuickSearchLoading(false);
     setQuickSearchSelected(null);
+    setShowAllRecentExchanges(false);
   }, [selectedId]);
 
   useEffect(() => {
@@ -464,6 +501,74 @@ export default function App() {
     setClarificationFor(rulebookId, null);
   }
 
+  function removeRecentExchange(rulebookId: string, exchangeId: string) {
+    if (!removeHistoryExchange(rulebookId, exchangeId)) {
+      return;
+    }
+    setHistory((current) => {
+      const nextEntries = (current[rulebookId] ?? []).filter((entry) => entry.id !== exchangeId);
+      if (nextEntries.length === 0) {
+        const next = { ...current };
+        delete next[rulebookId];
+        return next;
+      }
+      return { ...current, [rulebookId]: nextEntries };
+    });
+  }
+
+  function clearRecentExchanges(rulebookId: string, name: string) {
+    if (
+      !confirm(
+        `Clear all recent rulings for "${name}"? This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    clearHistory(rulebookId);
+    setHistory((current) => {
+      const next = { ...current };
+      delete next[rulebookId];
+      return next;
+    });
+    setShowAllRecentExchanges(false);
+  }
+
+  function toggleRecentExchangePin(rulebookId: string, exchangeId: string, pinned: boolean) {
+    if (!setHistoryExchangePinned(rulebookId, exchangeId, pinned)) {
+      return;
+    }
+    setHistory((current) => ({
+      ...current,
+      [rulebookId]: (current[rulebookId] ?? []).map((entry) =>
+        entry.id === exchangeId ? { ...entry, pinned } : entry,
+      ),
+    }));
+  }
+
+  function purgeRulebookState(id: string) {
+    removeRulebookStorage(id);
+    setThreads((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+    setHistory((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+    setClarifications((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+    setExamples((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+  }
+
   async function ingestUploadedRulebook(upload: Awaited<ReturnType<typeof uploadRulebook>>) {
     setSelectedId(upload.rulebook.id);
     setExamples((current) => ({
@@ -544,52 +649,60 @@ export default function App() {
   }
 
   async function submitQuestion(reply: string) {
-    if (!selectedId || !reply.trim()) {
+    if (!selectedId || !reply.trim() || loadingRef.current) {
       return;
     }
 
+    const requestRulebookId = selectedId;
     const trimmed = reply.trim();
-    const history = buildHistory(messages);
-    updateThread(selectedId, (current) => [...current, { role: "user", text: trimmed }]);
+    const priorMessages = threads[requestRulebookId] ?? [];
+    const history = buildHistory(priorMessages);
+    updateThread(requestRulebookId, (current) => [...current, { role: "user", text: trimmed }]);
 
+    loadingRef.current = true;
+    activeRequestRulebookRef.current = requestRulebookId;
     setLoading(true);
     setError(null);
     try {
-      const answer = await askRulebook(selectedId, trimmed, history);
+      const answer = await askRulebook(requestRulebookId, trimmed, history);
+      if (activeRequestRulebookRef.current !== requestRulebookId) {
+        return;
+      }
       if (answer.ruling.needs_clarification && answer.ruling.clarification_question) {
-        setClarificationFor(selectedId, {
+        setClarificationFor(requestRulebookId, {
           originalQuestion: clarification?.originalQuestion ?? trimmed,
           question: answer.ruling.clarification_question,
         });
       } else {
-        setClarificationFor(selectedId, null);
+        setClarificationFor(requestRulebookId, null);
       }
       const threadWithRuling = trimThread([
-        ...messages,
+        ...priorMessages,
         { role: "user", text: trimmed },
         { role: "referee", data: answer },
       ]);
-      setThreads((current) => {
-        saveThread(selectedId, threadWithRuling);
-        return { ...current, [selectedId]: threadWithRuling };
-      });
-      const entry = appendExchange(selectedId, threadWithRuling);
-      if (entry) {
-        setHistory((current) => ({
-          ...current,
-          [selectedId]: [...(current[selectedId] ?? []), entry].slice(-MAX_STORED_EXCHANGES),
-        }));
-      }
+      setThreads((current) => ({
+        ...current,
+        [requestRulebookId]: threadWithRuling,
+      }));
+      persistThreadAndHistory(requestRulebookId, threadWithRuling);
     } catch (err) {
-      setError(toAppError(err));
+      if (activeRequestRulebookRef.current === requestRulebookId) {
+        updateThread(requestRulebookId, () => priorMessages);
+        setError(toAppError(err));
+      }
     } finally {
-      setLoading(false);
+      if (activeRequestRulebookRef.current === requestRulebookId) {
+        loadingRef.current = false;
+        activeRequestRulebookRef.current = null;
+        setLoading(false);
+      }
     }
   }
 
   async function handleAsk(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedId || !question.trim()) return;
+    if (!selectedId || !question.trim() || loadingRef.current) return;
 
     const reply = question.trim();
     setQuestion("");
@@ -598,8 +711,9 @@ export default function App() {
 
   async function handleDispute(e: React.FormEvent) {
     e.preventDefault();
-    if (!selectedId) return;
+    if (!selectedId || loadingRef.current) return;
 
+    const requestRulebookId = selectedId;
     const situation = disputeSituation.trim();
     const playerA = disputePlayerA.trim();
     const playerB = disputePlayerB.trim();
@@ -609,44 +723,51 @@ export default function App() {
     setDisputePlayerA("");
     setDisputePlayerB("");
 
-    const history = buildHistory(messages);
-    updateThread(selectedId, (current) => [
+    const priorMessages = threads[requestRulebookId] ?? [];
+    const history = buildHistory(priorMessages);
+    updateThread(requestRulebookId, (current) => [
       ...current,
       { role: "dispute", situation, playerA, playerB },
     ]);
 
+    loadingRef.current = true;
+    activeRequestRulebookRef.current = requestRulebookId;
     setLoading(true);
     setError(null);
     try {
-      const answer = await disputeRulebook(selectedId, situation, playerA, playerB, history);
+      const answer = await disputeRulebook(requestRulebookId, situation, playerA, playerB, history);
+      if (activeRequestRulebookRef.current !== requestRulebookId) {
+        return;
+      }
       if (answer.ruling.needs_clarification && answer.ruling.clarification_question) {
-        setClarificationFor(selectedId, {
+        setClarificationFor(requestRulebookId, {
           originalQuestion: situation,
           question: answer.ruling.clarification_question,
         });
       } else {
-        setClarificationFor(selectedId, null);
+        setClarificationFor(requestRulebookId, null);
       }
       const threadWithRuling = trimThread([
-        ...messages,
+        ...priorMessages,
         { role: "dispute", situation, playerA, playerB },
         { role: "referee", data: answer },
       ]);
-      setThreads((current) => {
-        saveThread(selectedId, threadWithRuling);
-        return { ...current, [selectedId]: threadWithRuling };
-      });
-      const entry = appendExchange(selectedId, threadWithRuling);
-      if (entry) {
-        setHistory((current) => ({
-          ...current,
-          [selectedId]: [...(current[selectedId] ?? []), entry].slice(-MAX_STORED_EXCHANGES),
-        }));
-      }
+      setThreads((current) => ({
+        ...current,
+        [requestRulebookId]: threadWithRuling,
+      }));
+      persistThreadAndHistory(requestRulebookId, threadWithRuling);
     } catch (err) {
-      setError(toAppError(err));
+      if (activeRequestRulebookRef.current === requestRulebookId) {
+        updateThread(requestRulebookId, () => priorMessages);
+        setError(toAppError(err));
+      }
     } finally {
-      setLoading(false);
+      if (activeRequestRulebookRef.current === requestRulebookId) {
+        loadingRef.current = false;
+        activeRequestRulebookRef.current = null;
+        setLoading(false);
+      }
     }
   }
 
@@ -672,7 +793,12 @@ export default function App() {
     }
     setError(null);
     try {
-      await clearFaqCache(id);
+      const cleared = await clearFaqCache(id);
+      setInfo(
+        cleared > 0
+          ? `Cleared ${cleared} cached answer(s) for "${name}".`
+          : `No cached answers to clear for "${name}".`,
+      );
     } catch (err) {
       setError(toAppError(err));
     }
@@ -738,27 +864,7 @@ export default function App() {
     setError(null);
     try {
       await deleteRulebook(id);
-      removeRulebookStorage(id);
-      setThreads((current) => {
-        const next = { ...current };
-        delete next[id];
-        return next;
-      });
-      setHistory((current) => {
-        const next = { ...current };
-        delete next[id];
-        return next;
-      });
-      setClarifications((current) => {
-        const next = { ...current };
-        delete next[id];
-        return next;
-      });
-      setExamples((current) => {
-        const next = { ...current };
-        delete next[id];
-        return next;
-      });
+      purgeRulebookState(id);
       setRulebooks((current) => {
         const next = current.filter((book) => book.id !== id);
         setSelectedId((selected) => (selected === id ? (next[0]?.id ?? null) : selected));
@@ -766,6 +872,35 @@ export default function App() {
       });
     } catch (err) {
       setError(toAppError(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function clearAllRulebooks() {
+    if (rulebooks.length === 0) {
+      return;
+    }
+    if (
+      !confirm(
+        `Delete all ${rulebooks.length} rulebook${rulebooks.length === 1 ? "" : "s"} from your library? This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      for (const book of rulebooks) {
+        await deleteRulebook(book.id);
+        purgeRulebookState(book.id);
+      }
+      setRulebooks([]);
+      setSelectedId(null);
+      setShowAllRulebooks(false);
+    } catch (err) {
+      setError(toAppError(err));
+      await refresh();
     } finally {
       setLoading(false);
     }
@@ -891,7 +1026,7 @@ export default function App() {
             <input
               id="upload-name"
               type="text"
-              placeholder="Optional — we&apos;ll detect it from the PDF"
+              placeholder="Optional — we'll detect it from the PDF"
               value={uploadName}
               onChange={(e) => setUploadName(e.target.value)}
               disabled={uploading}
@@ -983,7 +1118,7 @@ export default function App() {
             <ul className="book-list">
               {displayedRulebooks.map((book) => (
                 <li key={book.id} className={book.id === selectedId ? "active" : ""}>
-                  <button type="button" onClick={() => selectRulebook(book.id)}>
+                  <button type="button" onClick={() => selectRulebook(book.id)} disabled={loading}>
                     <span className="book-icon">
                       <IconBook className="icon icon-sm" />
                     </span>
@@ -1033,7 +1168,7 @@ export default function App() {
                 See {hiddenRulebookCount} more
               </button>
             )}
-            {showAllRulebooks && rulebooks.length > RULEBOOKS_PREVIEW_LIMIT && (
+            {showAllRulebooks && rulebooks.length > SIDEBAR_LIST_PREVIEW_LIMIT && (
               <button
                 type="button"
                 className="book-list-toggle"
@@ -1042,35 +1177,94 @@ export default function App() {
                 Show less
               </button>
             )}
+            {rulebooks.length > 0 && (
+              <button
+                type="button"
+                className="book-list-toggle"
+                onClick={() => void clearAllRulebooks()}
+                disabled={loading}
+              >
+                Clear all
+              </button>
+            )}
           </section>
 
           {selected && recentExchanges.length > 0 && (
-            <section className="panel-section recent-exchanges">
+            <section className="panel-section">
               <h2 className="panel-title">
                 <span className="panel-title-icon">
                   <IconScales className="icon" />
                 </span>
                 Recent rulings
               </h2>
-              <p className="recent-exchanges-hint muted">
-                Last {recentExchanges.length} saved for this game.
-              </p>
-              <ul className="recent-exchange-list">
-                {recentExchanges.map((exchange) => (
+              <ul className="book-list">
+                {displayedRecentExchanges.map((exchange) => (
                   <li key={`${selected.id}-${exchange.id}`}>
                     <button
                       type="button"
-                      className="recent-exchange-btn"
                       onClick={() => openHistoryExchange(selected.id, exchange.id)}
                     >
-                      <span className="recent-exchange-mode">
-                        {exchange.mode === "dispute" ? "Dispute" : "Ask"}
+                      <span className="book-icon">
+                        <IconScales className="icon icon-sm" />
                       </span>
-                      <span className="recent-exchange-label">{exchange.label}</span>
+                      <span className="book-details">
+                        <strong>
+                          {exchange.pinned && (
+                            <IconPin className="icon book-pin-marker" />
+                          )}
+                          {exchange.label}
+                        </strong>
+                        <span className="book-pages">
+                          {exchange.mode === "dispute" ? "Dispute" : "Ask"}
+                        </span>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`pin${exchange.pinned ? " pinned" : ""}`}
+                      aria-label={exchange.pinned ? `Unpin ruling: ${exchange.label}` : `Pin ruling: ${exchange.label}`}
+                      title={exchange.pinned ? "Unpin" : "Pin to top"}
+                      onClick={() => toggleRecentExchangePin(selected.id, exchange.id, !exchange.pinned)}
+                    >
+                      <IconPin className="icon icon-sm" />
+                    </button>
+                    <button
+                      type="button"
+                      className="delete"
+                      aria-label={`Remove ruling: ${exchange.label}`}
+                      title="Remove ruling"
+                      onClick={() => removeRecentExchange(selected.id, exchange.id)}
+                    >
+                      ×
                     </button>
                   </li>
                 ))}
               </ul>
+              {hiddenRecentCount > 0 && (
+                <button
+                  type="button"
+                  className="book-list-toggle"
+                  onClick={() => setShowAllRecentExchanges(true)}
+                >
+                  See {hiddenRecentCount} more
+                </button>
+              )}
+              {showAllRecentExchanges && recentExchanges.length > SIDEBAR_LIST_PREVIEW_LIMIT && (
+                <button
+                  type="button"
+                  className="book-list-toggle"
+                  onClick={() => setShowAllRecentExchanges(false)}
+                >
+                  Show less
+                </button>
+              )}
+              <button
+                type="button"
+                className="book-list-toggle"
+                onClick={() => clearRecentExchanges(selected.id, selected.name)}
+              >
+                Clear all
+              </button>
             </section>
           )}
         </aside>
@@ -1457,9 +1651,9 @@ function RefereeAnswer({
 
       {ruling.citations.length > 0 && (
         <CitationsList
+          key={`${rulebookId}-${overlayDismissTick}`}
           rulebookId={rulebookId}
           data={data}
-          overlayDismissTick={overlayDismissTick}
         />
       )}
 
@@ -1609,7 +1803,11 @@ function RulebookPagePreview({
   }, [expanded]);
 
   if (previewFailed) {
-    return null;
+    return (
+      <figure className="source-panel-preview source-panel-preview-unavailable">
+        <p className="source-panel-missing">Page preview unavailable for this passage.</p>
+      </figure>
+    );
   }
 
   const lightbox = expanded ? (
@@ -1804,7 +2002,7 @@ function AppNotice({
         </div>
       )}
       {error && error.code !== "rate_limit" && error.code !== "bgg_manual_download" && (
-        <div className="notice-banner error">
+        <div className="notice-banner error" role="alert">
           <p>{error.message}</p>
           <button type="button" className="notice-dismiss" onClick={onDismissError} aria-label="Dismiss error">
             <IconClose className="icon icon-sm" />
@@ -1961,20 +2159,12 @@ function RulingFeedback({ rulebookId, data }: { rulebookId: string; data: AskRes
 function CitationsList({
   rulebookId,
   data,
-  overlayDismissTick,
 }: {
   rulebookId: string;
   data: AskResponse;
-  overlayDismissTick: number;
 }) {
   const { ruling, citation_check } = data;
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (overlayDismissTick > 0) {
-      setSelectedIndex(null);
-    }
-  }, [overlayDismissTick]);
 
   const selected = selectedIndex !== null ? citation_check.citations[selectedIndex] : null;
   const selectedRuling = selectedIndex !== null ? ruling.citations[selectedIndex] : null;

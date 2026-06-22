@@ -12,6 +12,7 @@ from agents.pipeline import RefereePipeline
 from services.bgg_fetch import BggDownloadError, BggError, download_rulebook_pdf
 from services.rulebook_store import DuplicateRulebookError
 from services.upload_stream import _sse
+from services.upload_utils import safe_stored_filename
 
 
 async def stream_bgg_rulebook_upload(
@@ -49,7 +50,7 @@ async def stream_bgg_rulebook_upload(
                     bgg_url=bgg_url,
                 ),
             )
-            stored_name = f"{uuid.uuid4()}_{original_filename}"
+            stored_name = f"{uuid.uuid4()}_{safe_stored_filename(original_filename)}"
             result = await loop.run_in_executor(
                 None,
                 lambda: pipeline.upload_rulebook(

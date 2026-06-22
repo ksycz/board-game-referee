@@ -107,6 +107,16 @@ def _parse_response(raw: str) -> dict:
     return json.loads(text)
 
 
+def _response_text(message) -> str:
+    if not message.content:
+        raise ValueError("Referee returned an empty response. Please try again.")
+    first_block = message.content[0]
+    text = getattr(first_block, "text", None)
+    if not text:
+        raise ValueError("Referee returned an empty response. Please try again.")
+    return text
+
+
 class RefereeAgent:
     def __init__(self, api_key: str | None = None) -> None:
         key = api_key or ANTHROPIC_API_KEY
@@ -159,7 +169,7 @@ class RefereeAgent:
         except anthropic.APIError as exc:
             raise ValueError(f"Anthropic API error: {exc.message}") from exc
 
-        raw = message.content[0].text
+        raw = _response_text(message)
         try:
             parsed = _parse_response(raw)
         except json.JSONDecodeError as exc:
@@ -219,7 +229,7 @@ class RefereeAgent:
         except anthropic.APIError as exc:
             raise ValueError(f"Anthropic API error: {exc.message}") from exc
 
-        raw = message.content[0].text
+        raw = _response_text(message)
         try:
             parsed = _parse_response(raw)
         except json.JSONDecodeError as exc:
