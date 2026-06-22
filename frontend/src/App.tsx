@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import type { ConfidenceHint as ConfidenceHintInfo } from "./api";
 import {
   AskResponse,
+  ApiError,
+  BggRulebookFile,
   Citation,
   HistoryMessage,
   Rulebook,
@@ -13,8 +15,10 @@ import {
   fetchExampleQuestions,
   formatUploadProgressMessage,
   formatUploadSuccessMessage,
+  formatFileSize,
   isDuplicateRulebookError,
   listRulebooks,
+  lookupBggRulebooks,
   pinRulebook,
   submitRulingFeedback,
   rulebookPagePreviewUrl,
@@ -24,6 +28,7 @@ import {
 } from "./api";
 import {
   IconBook,
+  IconChevronLeft,
   IconClose,
   IconCopy,
   IconDice,
@@ -59,6 +64,19 @@ type ClarificationContext = {
   originalQuestion: string;
   question: string;
 };
+
+type AppError = {
+  message: string;
+  code?: "rate_limit" | "bgg_manual_download";
+  bggUrl?: string;
+};
+
+function toAppError(err: unknown): AppError {
+  if (err instanceof ApiError && err.code === "rate_limit") {
+    return { message: err.message, code: "rate_limit" };
+  }
+  return { message: err instanceof Error ? err.message : String(err) };
+}
 
 function buildHistory(messages: Message[]): HistoryMessage[] {
   return messages.map((msg) => {
@@ -109,6 +127,46 @@ function visibleRulebooks(
   return preview;
 }
 
+const SIDEBAR_COLLAPSED_KEY = "rules-referee:v1:sidebar-collapsed";
+const DESKTOP_LAYOUT_QUERY = "(min-width: 801px)";
+
+function loadSidebarCollapsed(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  try {
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function saveSidebarCollapsed(collapsed: boolean): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    if (collapsed) {
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "1");
+    } else {
+      window.localStorage.removeItem(SIDEBAR_COLLAPSED_KEY);
+    }
+  } catch {
+    // Ignore quota or privacy-mode errors.
+  }
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  const tag = target.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+    return true;
+  }
+  return target.isContentEditable;
+}
+
 export default function App() {
   const [rulebooks, setRulebooks] = useState<Rulebook[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -122,20 +180,37 @@ export default function App() {
   const [disputePlayerA, setDisputePlayerA] = useState("");
   const [disputePlayerB, setDisputePlayerB] = useState("");
   const [uploadName, setUploadName] = useState("");
+  const [bggUrl, setBggUrl] = useState("");
+  const [bggCandidates, setBggCandidates] = useState<BggRulebookFile[] | null>(null);
+  const [bggLookupLoading, setBggLookupLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<AppError | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [showAllRulebooks, setShowAllRulebooks] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => loadSidebarCollapsed());
+  const [overlayDismissTick, setOverlayDismissTick] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const disputeSituationRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   function selectRulebook(id: string) {
     setSelectedId(id);
     setLibraryOpen(false);
   }
+
+  const showLibraryPanel = useCallback(() => {
+    setSidebarCollapsed(false);
+    saveSidebarCollapsed(false);
+  }, []);
+
+  const hideLibraryPanel = useCallback(() => {
+    setSidebarCollapsed(true);
+    saveSidebarCollapsed(true);
+    setLibraryOpen(false);
+  }, []);
 
   const displayedRulebooks = visibleRulebooks(rulebooks, selectedId, showAllRulebooks);
   const hiddenRulebookCount = showAllRulebooks
@@ -164,6 +239,16 @@ export default function App() {
       [rulebookId]: value,
     }));
   }, []);
+
+  const clearConversation = useCallback((rulebookId: string) => {
+    updateThread(rulebookId, () => []);
+    setClarificationFor(rulebookId, null);
+    setQuestion("");
+    setDisputeSituation("");
+    setDisputePlayerA("");
+    setDisputePlayerB("");
+    setError(null);
+  }, [updateThread, setClarificationFor]);
 
   const refresh = useCallback(async () => {
     const books = await listRulebooks();
@@ -199,7 +284,7 @@ export default function App() {
           return next;
         });
       })
-      .catch((e) => setError(String(e)));
+      .catch((e) => setError(toAppError(e)));
   }, [refresh]);
 
   useEffect(() => {
@@ -214,17 +299,91 @@ export default function App() {
     }
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setLibraryOpen(false);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", onKeyDown);
     };
   }, [libraryOpen]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const isEscape = event.key === "Escape" || event.code === "Escape";
+      if (isEscape && !event.isComposing) {
+        let handled = false;
+
+        if (document.querySelector(".source-panel")) {
+          setOverlayDismissTick((tick) => tick + 1);
+          handled = true;
+        } else {
+          const openDetails = document.querySelector("details[open]");
+          if (openDetails instanceof HTMLDetailsElement) {
+            openDetails.open = false;
+            handled = true;
+          } else if (libraryOpen) {
+            setLibraryOpen(false);
+            handled = true;
+          } else if (selectedId && clarification) {
+            setClarificationFor(selectedId, null);
+            handled = true;
+          } else if (error) {
+            setError(null);
+            handled = true;
+          } else if (info) {
+            setInfo(null);
+            handled = true;
+          } else if (
+            !sidebarCollapsed
+            && window.matchMedia(DESKTOP_LAYOUT_QUERY).matches
+          ) {
+            hideLibraryPanel();
+            handled = true;
+          }
+        }
+
+        if (handled) {
+          event.preventDefault();
+        }
+        return;
+      }
+
+      if (event.defaultPrevented || event.isComposing) {
+        return;
+      }
+
+      if (isEditableTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
+
+      if (event.key === "/" && selectedId) {
+        event.preventDefault();
+        if (chatMode === "ask") {
+          inputRef.current?.focus();
+        } else {
+          disputeSituationRef.current?.focus();
+        }
+        return;
+      }
+
+      if ((event.key === "n" || event.key === "N") && selectedId && !loading) {
+        event.preventDefault();
+        clearConversation(selectedId);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [
+    chatMode,
+    clarification,
+    clearConversation,
+    error,
+    hideLibraryPanel,
+    info,
+    libraryOpen,
+    loading,
+    selectedId,
+    setClarificationFor,
+    sidebarCollapsed,
+  ]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -266,14 +425,17 @@ export default function App() {
     setClarificationFor(rulebookId, null);
   }
 
-  function clearConversation(rulebookId: string) {
-    updateThread(rulebookId, () => []);
-    setClarificationFor(rulebookId, null);
-    setQuestion("");
-    setDisputeSituation("");
-    setDisputePlayerA("");
-    setDisputePlayerB("");
-    setError(null);
+  async function ingestUploadedRulebook(upload: Awaited<ReturnType<typeof uploadRulebook>>) {
+    setSelectedId(upload.rulebook.id);
+    setExamples((current) => ({
+      ...current,
+      [upload.rulebook.id]: upload.example_questions,
+    }));
+    clearConversation(upload.rulebook.id);
+    await refresh();
+    setInfo(formatUploadSuccessMessage(upload.rulebook.name, upload.ingestion));
+    setBggCandidates(null);
+    setBggUrl("");
   }
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -288,14 +450,7 @@ export default function App() {
         setUploadProgress(progress);
       });
       setUploadName("");
-      setSelectedId(upload.rulebook.id);
-      setExamples((current) => ({
-        ...current,
-        [upload.rulebook.id]: upload.example_questions,
-      }));
-      clearConversation(upload.rulebook.id);
-      await refresh();
-      setInfo(formatUploadSuccessMessage(upload.rulebook.name, upload.ingestion));
+      await ingestUploadedRulebook(upload);
     } catch (err) {
       if (isDuplicateRulebookError(err)) {
         setUploadName("");
@@ -310,12 +465,37 @@ export default function App() {
           + "Delete it first if you want to scan the PDF again.",
         );
       } else {
-        setError(err instanceof Error ? err.message : String(err));
+        setError(toAppError(err));
       }
     } finally {
       setUploading(false);
       setUploadProgress(null);
       e.target.value = "";
+    }
+  }
+
+  async function handleBggLookup() {
+    if (!bggUrl.trim()) {
+      return;
+    }
+    setBggLookupLoading(true);
+    setError(null);
+    setInfo(null);
+    try {
+      const result = await lookupBggRulebooks(bggUrl.trim());
+      setBggCandidates(result.files);
+      setUploadName(result.game_name);
+      if (result.files.length === 0) {
+        setInfo(
+          `No likely rulebook PDFs found for ${result.game_name} on BoardGameGeek. `
+          + "Try uploading a PDF manually.",
+        );
+      }
+    } catch (err) {
+      setBggCandidates(null);
+      setError(toAppError(err));
+    } finally {
+      setBggLookupLoading(false);
     }
   }
 
@@ -357,7 +537,7 @@ export default function App() {
         }));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(toAppError(err));
     } finally {
       setLoading(false);
     }
@@ -420,7 +600,7 @@ export default function App() {
         }));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(toAppError(err));
     } finally {
       setLoading(false);
     }
@@ -434,7 +614,7 @@ export default function App() {
         current.map((book) => (book.id === id ? updated : book)),
       ));
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(toAppError(err));
     }
   }
 
@@ -450,7 +630,7 @@ export default function App() {
     try {
       await clearFaqCache(id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(toAppError(err));
     }
   }
 
@@ -487,7 +667,7 @@ export default function App() {
         return next;
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(toAppError(err));
     } finally {
       setLoading(false);
     }
@@ -522,7 +702,7 @@ export default function App() {
         />
       )}
 
-      <div className="layout">
+      <div className={`layout${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
         {libraryOpen && (
           <button
             type="button"
@@ -532,7 +712,32 @@ export default function App() {
           />
         )}
 
+        {sidebarCollapsed && (
+          <button
+            type="button"
+            className="sidebar-expand-rail"
+            aria-label="Show library panel"
+            title="Show library panel"
+            onClick={showLibraryPanel}
+          >
+            <IconLibrary className="icon" />
+          </button>
+        )}
+
         <aside className={`sidebar panel${libraryOpen ? " open" : ""}`}>
+          <div className="sidebar-desktop-header">
+            <h2>Library</h2>
+            <button
+              type="button"
+              className="sidebar-collapse-btn"
+              aria-label="Hide library panel"
+              title="Hide library panel"
+              onClick={hideLibraryPanel}
+            >
+              <IconChevronLeft className="icon icon-sm" />
+            </button>
+          </div>
+
           <div className="sidebar-mobile-header">
             <h2>Your library</h2>
             <button
@@ -568,6 +773,67 @@ export default function App() {
               {uploading ? "Processing…" : "Choose rulebook PDF"}
               <input type="file" accept=".pdf" onChange={handleUpload} hidden disabled={uploading} />
             </label>
+
+            <div className="bgg-import">
+              <label className="field-label" htmlFor="bgg-url">
+                Or find rulebooks on BoardGameGeek
+              </label>
+              <div className="bgg-import-row">
+                <input
+                  id="bgg-url"
+                  type="url"
+                  placeholder="boardgamegeek.com/boardgame/…"
+                  value={bggUrl}
+                  onChange={(e) => setBggUrl(e.target.value)}
+                  disabled={uploading || bggLookupLoading}
+                />
+                <button
+                  type="button"
+                  className="bgg-lookup-btn"
+                  disabled={uploading || bggLookupLoading || !bggUrl.trim()}
+                  onClick={() => {
+                    void handleBggLookup();
+                  }}
+                >
+                  {bggLookupLoading ? "Finding…" : "Find"}
+                </button>
+              </div>
+              {bggCandidates && bggCandidates.length > 0 && (
+                <>
+                  <p className="bgg-import-hint">
+                    BoardGameGeek blocks automatic downloads. Open a file, save the PDF in your
+                    browser, then upload it with Choose rulebook PDF above.
+                  </p>
+                  <ul className="bgg-file-list">
+                    {bggCandidates.map((file) => (
+                      <li key={file.file_id}>
+                        <a
+                          className="bgg-file-btn"
+                          href={file.bgg_url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <span className="bgg-file-title">{file.title}</span>
+                          <span className="bgg-file-meta">
+                            {file.filename} · {formatFileSize(file.size)}
+                            {file.votes > 0 ? ` · ${file.votes} thumbs` : ""}
+                          </span>
+                        </a>
+                        <a
+                          className="bgg-file-link"
+                          href={file.download_url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Download on BGG
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </div>
+
             {uploading && uploadProgress && (
               <div className="upload-progress" role="status" aria-live="polite">
                 <p className="upload-progress-label">
@@ -700,7 +966,10 @@ export default function App() {
               <button
                 type="button"
                 className="open-library-btn"
-                onClick={() => setLibraryOpen(true)}
+                onClick={() => {
+                  showLibraryPanel();
+                  setLibraryOpen(true);
+                }}
               >
                 <IconLibrary className="icon icon-sm" />
                 Open library
@@ -833,7 +1102,11 @@ export default function App() {
                   ) : (
                     <div key={i} id={`message-${i}`} className="message-wrap referee">
                       <span className="message-label">Referee</span>
-                      <RefereeAnswer rulebookId={selected.id} data={msg.data} />
+                      <RefereeAnswer
+                        rulebookId={selected.id}
+                        data={msg.data}
+                        overlayDismissTick={overlayDismissTick}
+                      />
                     </div>
                   )
                 )}
@@ -894,6 +1167,7 @@ export default function App() {
                     </label>
                     <textarea
                       id="dispute-situation"
+                      ref={disputeSituationRef}
                       value={disputeSituation}
                       onChange={(e) => setDisputeSituation(e.target.value)}
                       placeholder="e.g. Can I play this card after combat ends?"
@@ -955,9 +1229,11 @@ export default function App() {
 function RefereeAnswer({
   rulebookId,
   data,
+  overlayDismissTick,
 }: {
   rulebookId: string;
   data: AskResponse;
+  overlayDismissTick: number;
 }) {
   const { ruling, citation_check } = data;
   const needsInput = ruling.needs_clarification && ruling.clarification_question;
@@ -1016,7 +1292,11 @@ function RefereeAnswer({
       )}
 
       {ruling.citations.length > 0 && (
-        <CitationsList rulebookId={rulebookId} data={data} />
+        <CitationsList
+          rulebookId={rulebookId}
+          data={data}
+          overlayDismissTick={overlayDismissTick}
+        />
       )}
 
       {!needsInput && (
@@ -1042,7 +1322,7 @@ function AppNotice({
   onDismissError,
   onDismissInfo,
 }: {
-  error: string | null;
+  error: AppError | null;
   info: string | null;
   onDismissError: () => void;
   onDismissInfo: () => void;
@@ -1057,9 +1337,44 @@ function AppNotice({
           </button>
         </div>
       )}
-      {error && (
+      {error?.code === "rate_limit" && (
+        <div className="notice-banner rate-limit" role="alert">
+          <div className="notice-banner-copy">
+            <p className="notice-banner-title">Referee needs a breather</p>
+            <p>{error.message}</p>
+            <p className="notice-banner-hint">
+              If you asked this before, try the same wording again — cached answers skip the API.
+              Otherwise wait a minute and ask again.
+            </p>
+          </div>
+          <button type="button" className="notice-dismiss" onClick={onDismissError} aria-label="Dismiss message">
+            <IconClose className="icon icon-sm" />
+          </button>
+        </div>
+      )}
+      {error?.code === "bgg_manual_download" && (
+        <div className="notice-banner info" role="alert">
+          <div className="notice-banner-copy">
+            <p className="notice-banner-title">Download the PDF on BoardGameGeek</p>
+            <p>{error.message}</p>
+            {error.bggUrl && (
+              <p className="notice-banner-hint">
+                <a href={error.bggUrl} target="_blank" rel="noreferrer">
+                  Open file on BoardGameGeek
+                </a>
+                {" · "}
+                Then use Choose rulebook PDF above.
+              </p>
+            )}
+          </div>
+          <button type="button" className="notice-dismiss" onClick={onDismissError} aria-label="Dismiss message">
+            <IconClose className="icon icon-sm" />
+          </button>
+        </div>
+      )}
+      {error && error.code !== "rate_limit" && error.code !== "bgg_manual_download" && (
         <div className="notice-banner error">
-          <p>{error}</p>
+          <p>{error.message}</p>
           <button type="button" className="notice-dismiss" onClick={onDismissError} aria-label="Dismiss error">
             <IconClose className="icon icon-sm" />
           </button>
@@ -1215,12 +1530,20 @@ function RulingFeedback({ rulebookId, data }: { rulebookId: string; data: AskRes
 function CitationsList({
   rulebookId,
   data,
+  overlayDismissTick,
 }: {
   rulebookId: string;
   data: AskResponse;
+  overlayDismissTick: number;
 }) {
   const { ruling, citation_check } = data;
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (overlayDismissTick > 0) {
+      setSelectedIndex(null);
+    }
+  }, [overlayDismissTick]);
 
   const selected = selectedIndex !== null ? citation_check.citations[selectedIndex] : null;
   const selectedRuling = selectedIndex !== null ? ruling.citations[selectedIndex] : null;

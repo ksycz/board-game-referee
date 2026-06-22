@@ -11,6 +11,7 @@ RULEBOOKS_DIR = DATA_DIR / "rulebooks"
 CHROMA_DIR = DATA_DIR / "chroma"
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+BGG_API_TOKEN = os.getenv("BGG_API_TOKEN", "")
 MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 TOP_K_CHUNKS = int(os.getenv("TOP_K_CHUNKS", "6"))
 CHUNK_MAX_CHARS = int(os.getenv("CHUNK_MAX_CHARS", "600"))

@@ -7,6 +7,8 @@ import re
 
 import anthropic
 
+from errors import RateLimitError
+
 from config import ANTHROPIC_API_KEY, MODEL
 from services.conversation import format_history_block
 from services.vector_store import StoredChunk
@@ -151,7 +153,7 @@ class RefereeAgent:
         except anthropic.NotFoundError as exc:
             raise ValueError(f"Model '{MODEL}' not found. Update ANTHROPIC_MODEL in .env.") from exc
         except anthropic.RateLimitError as exc:
-            raise ValueError("Anthropic rate limit exceeded. Try again shortly.") from exc
+            raise RateLimitError() from exc
         except anthropic.APIConnectionError as exc:
             raise ValueError("Could not reach Anthropic API. Check your network.") from exc
         except anthropic.APIError as exc:
@@ -211,7 +213,7 @@ class RefereeAgent:
         except anthropic.NotFoundError as exc:
             raise ValueError(f"Model '{MODEL}' not found. Update ANTHROPIC_MODEL in .env.") from exc
         except anthropic.RateLimitError as exc:
-            raise ValueError("Anthropic rate limit exceeded. Try again shortly.") from exc
+            raise RateLimitError() from exc
         except anthropic.APIConnectionError as exc:
             raise ValueError("Could not reach Anthropic API. Check your network.") from exc
         except anthropic.APIError as exc:

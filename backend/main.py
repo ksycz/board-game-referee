@@ -15,11 +15,22 @@ from pydantic import BaseModel, Field
 
 from agents.pipeline import RefereePipeline
 from config import CORS_ORIGINS, DATA_DIR, MODEL, OCR_FALLBACK, ensure_dirs
+from errors import RateLimitError
 from services.pdf_parser import ensure_tesseract_path
+from services.bgg_fetch import BggError, lookup_rulebooks
+from services.bgg_upload_stream import stream_bgg_rulebook_upload
 from services.rulebook_store import DuplicateRulebookError
 from services.upload_stream import stream_rulebook_upload
 
 ensure_dirs()
+
+
+def rate_limit_http_exception(exc: RateLimitError) -> HTTPException:
+    return HTTPException(
+        status_code=429,
+        detail={"code": "rate_limit", "message": str(exc)},
+    )
+
 
 app = FastAPI(title="Board Game Rules Referee", version="0.1.0")
 pipeline = RefereePipeline()
@@ -73,6 +84,17 @@ class RulingFeedbackRequest(BaseModel):
     retrieved_pages: list[int] = Field(default_factory=list, max_length=50)
 
 
+class BggLookupRequest(BaseModel):
+    url: str = Field(min_length=8, max_length=500)
+
+
+class BggImportRequest(BaseModel):
+    file_id: str = Field(min_length=1, max_length=32)
+    filename: str | None = Field(default=None, max_length=255)
+    name: str | None = Field(default=None, max_length=120)
+    bgg_url: str | None = Field(default=None, max_length=500)
+
+
 def _safe_filename(name: str) -> str:
     base = re.sub(r"[^\w.\-]+", "_", name).strip("._")
     return base or "rulebook.pdf"
@@ -104,6 +126,35 @@ async def upload_rulebook_stream(
             stored_name=stored_name,
             pdf_bytes=content,
             original_filename=original_filename,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.post("/api/rulebooks/bgg/lookup")
+def bgg_lookup(body: BggLookupRequest):
+    try:
+        return lookup_rulebooks(body.url)
+    except BggError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/rulebooks/bgg/upload-stream")
+async def bgg_upload_stream(body: BggImportRequest):
+    display_name = (body.name or "").strip() or None
+    filename_hint = (body.filename or "").strip() or None
+    bgg_url = (body.bgg_url or "").strip() or None
+    return StreamingResponse(
+        stream_bgg_rulebook_upload(
+            pipeline,
+            file_id=body.file_id.strip(),
+            filename_hint=filename_hint,
+            display_name=display_name,
+            bgg_url=bgg_url,
         ),
         media_type="text/event-stream",
         headers={
@@ -235,6 +286,8 @@ def ask_rulebook(rulebook_id: str, body: AskRequest):
         return pipeline.ask(rulebook_id, body.question, body.top_k, history)
     except KeyError:
         raise HTTPException(status_code=404, detail="Rulebook not found")
+    except RateLimitError as exc:
+        raise rate_limit_http_exception(exc) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
@@ -264,6 +317,8 @@ def dispute_rulebook(rulebook_id: str, body: DisputeRequest):
         )
     except KeyError:
         raise HTTPException(status_code=404, detail="Rulebook not found")
+    except RateLimitError as exc:
+        raise rate_limit_http_exception(exc) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:

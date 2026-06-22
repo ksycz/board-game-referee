@@ -248,6 +248,66 @@ def test_dispute_without_api_key_returns_error(client, sample_pdf):
     assert "anthropic" in detail or "api_key" in detail
 
 
+def test_ask_rate_limit_returns_429(client, sample_pdf, monkeypatch):
+    import main
+    from errors import RateLimitError
+
+    with sample_pdf.open("rb") as f:
+        upload = client.post(
+            "/api/rulebooks",
+            files={"file": ("sample-rulebook.pdf", f, "application/pdf")},
+            data={"name": "Test Game"},
+        )
+    book_id = upload.json()["rulebook"]["id"]
+
+    def raise_rate_limit(*args, **kwargs):
+        raise RateLimitError()
+
+    monkeypatch.setattr(main.pipeline, "ask", raise_rate_limit)
+
+    res = client.post(
+        f"/api/rulebooks/{book_id}/ask",
+        json={"question": "Can I attack on the first turn?"},
+    )
+    assert res.status_code == 429
+    detail = res.json()["detail"]
+    assert detail["code"] == "rate_limit"
+    assert "minute" in detail["message"].lower()
+
+
+def test_bgg_lookup_endpoint(client, monkeypatch):
+    monkeypatch.setattr(
+        "main.lookup_rulebooks",
+        lambda url: {
+            "thing_id": "13",
+            "game_name": "Catan",
+            "files": [
+                {
+                    "file_id": "99",
+                    "filepage_id": "12",
+                    "title": "Official rulebook",
+                    "filename": "catan-rules.pdf",
+                    "size": 1500000,
+                    "language": "English",
+                    "votes": 8,
+                    "score": 9.8,
+                    "bgg_url": "https://boardgamegeek.com/filepage/12/official-rulebook",
+                    "download_url": "https://boardgamegeek.com/file/download/99",
+                },
+            ],
+        },
+    )
+
+    res = client.post(
+        "/api/rulebooks/bgg/lookup",
+        json={"url": "https://boardgamegeek.com/boardgame/13/catan"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["game_name"] == "Catan"
+    assert body["files"][0]["file_id"] == "99"
+
+
 def test_dispute_rejects_short_arguments(client, sample_pdf):
     with sample_pdf.open("rb") as f:
         upload = client.post(

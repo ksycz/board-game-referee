@@ -5,6 +5,9 @@ function parseErrorDetail(detail: unknown): string | undefined {
   if (typeof detail === "object" && detail && "message" in detail) {
     return String((detail as { message: string }).message);
   }
+  if (typeof detail === "object" && detail && "code" in detail && "message" in detail) {
+    return String((detail as { message: string }).message);
+  }
   if (Array.isArray(detail)) {
     return detail
       .map((item) => {
@@ -16,6 +19,59 @@ function parseErrorDetail(detail: unknown): string | undefined {
       .join("; ");
   }
   return undefined;
+}
+
+export type ApiErrorCode = "rate_limit";
+
+export class ApiError extends Error {
+  readonly code: ApiErrorCode | "unknown";
+  readonly status: number;
+
+  constructor(message: string, code: ApiErrorCode | "unknown", status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.code = code;
+    this.status = status;
+  }
+}
+
+export function isRateLimitError(err: unknown): err is ApiError {
+  return err instanceof ApiError && err.code === "rate_limit";
+}
+
+function parseApiError(status: number, body: Record<string, unknown>): ApiError {
+  const detail = body.detail ?? body;
+  const message = parseErrorDetail(detail) ?? "Request failed";
+
+  if (status === 429) {
+    return new ApiError(message, "rate_limit", status);
+  }
+
+  if (
+    typeof detail === "object"
+    && detail
+    && (detail as { code?: string }).code === "rate_limit"
+  ) {
+    return new ApiError(message, "rate_limit", status);
+  }
+
+  if (/rate limit/i.test(message)) {
+    return new ApiError(message, "rate_limit", status);
+  }
+
+  return new ApiError(message, "unknown", status);
+}
+
+async function throwIfNotOk(res: Response, fallback: string): Promise<void> {
+  if (res.ok) {
+    return;
+  }
+  const body = await res.json().catch(() => ({}));
+  const err = parseApiError(res.status, body as Record<string, unknown>);
+  if (err.code === "unknown" && err.message === "Request failed") {
+    throw new ApiError(fallback, "unknown", res.status);
+  }
+  throw err;
 }
 
 export type Rulebook = {
@@ -140,9 +196,14 @@ export function formatUploadSuccessMessage(name: string, ingestion?: IngestionRe
   return `"${name}" is ready — you can ask rules questions now.`;
 }
 
-export function formatUploadProgressMessage(progress: UploadProgress): string {
+export function formatUploadProgressMessage(
+  progress: UploadProgress,
+  source: "upload" | "bgg" = "upload",
+): string {
   const { phase, page, total_pages } = progress;
-  if (phase === "starting") return "Opening PDF…";
+  if (phase === "starting") {
+    return source === "bgg" ? "Downloading from BoardGameGeek…" : "Opening PDF…";
+  }
   if (phase === "indexing") return "Building search index…";
   if (phase === "scanning" && total_pages > 0) {
     return `Scanning page ${page} of ${total_pages} (mostly graphics)…`;
@@ -166,7 +227,7 @@ type UploadStreamEvent =
   | { type: "progress"; progress: UploadProgress }
   | { type: "complete"; data: UploadResponse }
   | { type: "duplicate"; rulebook: Rulebook; example_questions: string[]; message: string }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string; bgg_url?: string; code?: string };
 
 function parseSseChunk(buffer: string): { events: UploadStreamEvent[]; rest: string } {
   const events: UploadStreamEvent[] = [];
@@ -216,6 +277,8 @@ function parseSseChunk(buffer: string): { events: UploadStreamEvent[]; rest: str
       events.push({
         type: "error",
         message: String(payload.message ?? "Upload failed"),
+        bgg_url: typeof payload.bgg_url === "string" ? payload.bgg_url : undefined,
+        code: typeof payload.code === "string" ? payload.code : undefined,
       });
     }
   }
@@ -280,6 +343,101 @@ export function isDuplicateRulebookError(err: unknown): err is DuplicateRulebook
   );
 }
 
+export type BggRulebookFile = {
+  file_id: string;
+  filepage_id: string;
+  title: string;
+  filename: string;
+  size: number;
+  language: string | null;
+  votes: number;
+  score: number;
+  bgg_url: string;
+  download_url: string;
+};
+
+export type BggLookupResponse = {
+  thing_id: string;
+  game_name: string;
+  files: BggRulebookFile[];
+};
+
+export class BggImportError extends Error {
+  readonly bggUrl?: string;
+  readonly code?: string;
+
+  constructor(message: string, options?: { bggUrl?: string; code?: string }) {
+    super(message);
+    this.name = "BggImportError";
+    this.bggUrl = options?.bggUrl;
+    this.code = options?.code;
+  }
+}
+
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(bytes < 10_240 ? 1 : 0)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export async function lookupBggRulebooks(url: string): Promise<BggLookupResponse> {
+  const res = await fetch(`${API}/api/rulebooks/bgg/lookup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url }),
+  });
+  if (!res.ok) {
+    await throwIfNotOk(res, "Could not look up that BoardGameGeek link");
+  }
+  return res.json();
+}
+
+export async function uploadBggRulebook(
+  file: BggRulebookFile,
+  name?: string,
+  onProgress?: (progress: UploadProgress) => void,
+): Promise<UploadResponse> {
+  const res = await fetch(`${API}/api/rulebooks/bgg/upload-stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      file_id: file.file_id,
+      filename: file.filename,
+      name,
+      bgg_url: file.bgg_url,
+    }),
+  });
+  if (!res.ok) {
+    await throwIfNotOk(res, "BGG import failed");
+  }
+  if (!res.body) {
+    throw new Error("BGG import failed — no response from server.");
+  }
+
+  const result = await readUploadStream(res.body, onProgress);
+  if (result.type === "complete") {
+    return result.data;
+  }
+  if (result.type === "duplicate") {
+    throw new DuplicateRulebookError(
+      result.message,
+      result.rulebook,
+      result.example_questions,
+    );
+  }
+  if (result.type === "error") {
+    throw new BggImportError(result.message, {
+      bggUrl: result.bgg_url,
+      code: result.code,
+    });
+  }
+  throw new Error("BGG import failed.");
+}
+
 export async function listRulebooks(): Promise<Rulebook[]> {
   const res = await fetch(`${API}/api/rulebooks`);
   if (!res.ok) throw new Error("Failed to load rulebooks");
@@ -342,8 +500,7 @@ export async function askRulebook(
     body: JSON.stringify({ question, history }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(parseErrorDetail(err.detail) ?? "Question failed");
+    await throwIfNotOk(res, "Question failed");
   }
   return res.json();
 }
@@ -366,8 +523,7 @@ export async function disputeRulebook(
     }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(parseErrorDetail(err.detail) ?? "Dispute failed");
+    await throwIfNotOk(res, "Dispute failed");
   }
   return res.json();
 }

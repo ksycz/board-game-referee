@@ -149,3 +149,19 @@ export function IconThumbDown({ className }: IconProps) {
     </Icon>
   );
 }
+
+export function IconChevronLeft({ className }: IconProps) {
+  return (
+    <Icon className={className}>
+      <path d="m14 6-6 6 6 6" />
+    </Icon>
+  );
+}
+
+export function IconChevronRight({ className }: IconProps) {
+  return (
+    <Icon className={className}>
+      <path d="m10 6 6 6-6 6" />
+    </Icon>
+  );
+}

@@ -155,34 +155,6 @@ body::after {
     linear-gradient(180deg, var(--surface-raised), var(--surface-card));
 }
 
-.site-header.panel::before,
-.site-header.panel::after,
-.panel::before,
-.panel::after {
-  content: "";
-  position: absolute;
-  width: 14px;
-  height: 14px;
-  pointer-events: none;
-  opacity: 0.55;
-}
-
-.site-header.panel::before,
-.panel::before {
-  top: 8px;
-  left: 8px;
-  border-top: 2px solid var(--accent);
-  border-left: 2px solid var(--accent);
-}
-
-.site-header.panel::after,
-.panel::after {
-  top: 8px;
-  right: 8px;
-  border-top: 2px solid var(--accent);
-  border-right: 2px solid var(--accent);
-}
-
 .brand-mark {
   flex-shrink: 0;
   width: 3.5rem;
@@ -340,6 +312,39 @@ body::after {
   border: 1px solid var(--border-gold);
 }
 
+.notice-banner.rate-limit {
+  color: #e8c89a;
+  background: rgb(168 112 48 / 0.12);
+  border: 1px solid color-mix(in srgb, #c89048 40%, var(--border));
+}
+
+.notice-banner-copy {
+  flex: 1;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.notice-banner-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: #f0d4a8;
+}
+
+.notice-banner-hint {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: rgb(232 200 154 / 0.82);
+}
+
+.notice-banner.rate-limit p:not(.notice-banner-title):not(.notice-banner-hint) {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
 .notice-dismiss {
   flex-shrink: 0;
   display: grid;
@@ -403,6 +408,96 @@ body::after {
 .sidebar {
   position: sticky;
   top: 1rem;
+}
+
+.sidebar-desktop-header,
+.sidebar-expand-rail {
+  display: none;
+}
+
+@media (min-width: 801px) {
+  .sidebar-desktop-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.7rem 0.85rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-card);
+  }
+
+  .sidebar-desktop-header h2 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 0.92rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--ink);
+  }
+
+  .sidebar-collapse-btn {
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface-sunken);
+    color: var(--ink-muted);
+    cursor: pointer;
+    transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
+  }
+
+  .sidebar-collapse-btn:hover {
+    border-color: var(--border-gold);
+    color: var(--accent-glow);
+    background: var(--accent-soft);
+  }
+
+  .layout.sidebar-collapsed {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .app-in-session .layout.sidebar-collapsed {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .layout.sidebar-collapsed .sidebar {
+    display: none;
+  }
+
+  .layout.sidebar-collapsed .sidebar-expand-rail {
+    display: grid;
+    place-items: center;
+    position: sticky;
+    top: 1rem;
+    align-self: start;
+    width: 2.75rem;
+    height: 2.75rem;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background:
+      linear-gradient(180deg, rgb(255 255 255 / 0.05), transparent 12%),
+      linear-gradient(180deg, var(--surface-raised) 0%, var(--surface-card) 100%);
+    color: var(--accent-glow);
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    transition: border-color 0.12s ease, background 0.12s ease, color 0.12s ease;
+  }
+
+  .layout.sidebar-collapsed .sidebar-expand-rail:hover {
+    border-color: var(--border-gold);
+    background:
+      linear-gradient(180deg, rgb(122 40 56 / 0.08), transparent 40%),
+      linear-gradient(180deg, var(--surface-raised) 0%, var(--surface-card) 100%);
+    color: var(--ink);
+  }
+
+  .app-in-session .sidebar-expand-rail {
+    top: 0.75rem;
+  }
 }
 
 .panel-section {
@@ -495,6 +590,119 @@ body::after {
 
 .upload-btn:active {
   transform: translateY(0);
+}
+
+.bgg-import {
+  margin-top: 0.85rem;
+}
+
+.bgg-import-hint {
+  margin: 0.55rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--ink-muted);
+}
+
+.bgg-import-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.45rem;
+}
+
+.bgg-import input[type="url"] {
+  width: 100%;
+  min-width: 0;
+  padding: 0.62rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--ink);
+  font: inherit;
+}
+
+.bgg-import input[type="url"]:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgb(122 40 56 / 0.15);
+}
+
+.bgg-lookup-btn {
+  flex-shrink: 0;
+  min-height: 2.5rem;
+  padding: 0.45rem 0.85rem;
+  border: 1px solid var(--border-gold);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent-glow);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.bgg-lookup-btn:hover:not(:disabled) {
+  background: rgb(122 40 56 / 0.18);
+}
+
+.bgg-lookup-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.bgg-file-list {
+  list-style: none;
+  margin: 0.65rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.bgg-file-list li {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.bgg-file-btn {
+  display: grid;
+  gap: 0.2rem;
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.bgg-file-btn:hover {
+  border-color: var(--border-gold);
+  background: var(--surface-muted);
+}
+
+.bgg-file-title {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.bgg-file-meta {
+  font-size: 0.76rem;
+  color: var(--ink-muted);
+  line-height: 1.35;
+}
+
+.bgg-file-link {
+  font-size: 0.74rem;
+  color: var(--accent-glow);
+  text-decoration: none;
+}
+
+.bgg-file-link:hover {
+  text-decoration: underline;
 }
 
 .upload-btn-busy {
