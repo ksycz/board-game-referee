@@ -7,6 +7,7 @@ import fitz
 from services.pdf_parser import (
     _page_needs_ocr,
     chunk_page_text,
+    clean_chunk_text,
     ensure_tesseract_path,
     extract_chunks,
 )
@@ -106,6 +107,24 @@ def test_page_number_only_text_is_not_indexed():
     assert chunks == []
 
 
+def test_strip_leading_layout_noise():
+    assert clean_chunk_text("14 14 3 11 11 Shuffle the Lantern cards") == "Shuffle the Lantern cards"
+    assert clean_chunk_text("4 Randomly place the tiles") == "Randomly place the tiles"
+    assert clean_chunk_text("On your turn, draw cards.") == "On your turn, draw cards."
+
+
+def test_chunk_page_text_strips_graphical_number_prefix():
+    page_text = (
+        "14 14 3 11 11 Shuffle the Lantern cards, reveal 3 of them, "
+        "and lay them face-up beside the deck."
+    )
+    chunks = chunk_page_text(1, page_text, max_chars=600, min_chars=40)
+
+    assert len(chunks) == 1
+    assert chunks[0].text.startswith("Shuffle the Lantern cards")
+    assert not chunks[0].text.startswith("14")
+
+
 def test_section_body_kept_when_page_number_noise_present():
     page_text = """Choose Actions
 
@@ -170,7 +189,7 @@ def test_page_needs_ocr_when_only_short_component_list():
 """
     chunks = chunk_page_text(1, page_text, max_chars=600, min_chars=80)
 
-    assert len(chunks) == 1
+    assert chunks == []
     assert _page_needs_ocr(page_text, chunks) is True
 
 
@@ -234,9 +253,9 @@ def test_extract_chunks_marks_component_list_page_as_thin(tmp_path):
     chunks, total_pages, pages_indexed, ocr_pages, thin_pages = extract_chunks(pdf)
 
     assert total_pages == 1
-    assert pages_indexed == 1
+    assert pages_indexed == 0
     assert thin_pages == [1]
-    assert len(chunks) == 1
+    assert chunks == []
 
 
 def test_extract_chunks_marks_sparse_page_as_thin(tmp_path):

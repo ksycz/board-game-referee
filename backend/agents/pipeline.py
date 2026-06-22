@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable
-from pathlib import Path
 
 from agents.citation_agent import CitationAgent
 from agents.ingestion_agent import IngestionAgent
@@ -151,6 +150,14 @@ class RefereePipeline:
         if not self.store.get(rulebook_id):
             raise KeyError(f"Rulebook not found: {rulebook_id}")
         return example_questions_for_rulebook(self.vector_store, rulebook_id)
+
+    def quick_search(self, rulebook_id: str, query: str, *, limit: int = 8) -> dict:
+        if not self.store.get(rulebook_id):
+            raise KeyError(f"Rulebook not found: {rulebook_id}")
+        trimmed = query.strip()
+        if len(trimmed) < 2:
+            raise ValueError("Enter at least two characters to search.")
+        return self.retrieval.quick_search(rulebook_id, trimmed, limit)
 
     def ask(
         self,
@@ -301,6 +308,32 @@ class RefereePipeline:
                 keep_hashes.add(book.content_hash)
         return removed
 
-    def reindex(self, rulebook_id: str) -> dict:
+    def reindex(
+        self,
+        rulebook_id: str,
+        *,
+        on_progress: Callable[[dict], None] | None = None,
+    ) -> dict:
+        book = self.store.get(rulebook_id)
+        if not book:
+            raise KeyError(f"Rulebook not found: {rulebook_id}")
+
         pdf_path = self.store.pdf_path(rulebook_id)
-        return self.ingestion.ingest(rulebook_id, Path(pdf_path))
+        if not pdf_path.exists():
+            raise FileNotFoundError(f"PDF not found for rulebook: {rulebook_id}")
+
+        faq_cache_cleared = self.faq_cache.clear_rulebook(rulebook_id)
+        ingest_result = self.ingestion.ingest(
+            rulebook_id,
+            pdf_path,
+            on_progress=on_progress,
+        )
+        book.page_count = ingest_result["pages_extracted"]
+        self.store._save()
+
+        return {
+            "rulebook": book,
+            "ingestion": ingest_result,
+            "example_questions": self.example_questions(rulebook_id),
+            "faq_cache_cleared": faq_cache_cleared,
+        }

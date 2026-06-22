@@ -17,3 +17,19 @@ class RetrievalAgent:
             "chunks_found": len(chunks),
             "chunks": chunks,
         }
+
+    def quick_search(self, rulebook_id: str, query: str, limit: int) -> dict:
+        chunks = self.vector_store.keyword_search(rulebook_id, query, limit)
+        return {
+            "agent": "quick_search",
+            "query": query,
+            "hits": [
+                {
+                    "page": chunk.page,
+                    "section": chunk.section_hint,
+                    "text": chunk.text,
+                    "score": chunk.score,
+                }
+                for chunk in chunks
+            ],
+        }

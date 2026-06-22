@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from agents.pipeline import RefereePipeline
 from services.conversation import retrieval_query
+from services.faq_cache import ask_lookup_key
 from services.vector_store import StoredChunk
 
 
@@ -160,6 +161,38 @@ def test_pipeline_ask_returns_cached_answer_without_second_llm_call(
     assert not first.get("cached")
     assert second["cached"] is True
     assert second["ruling"]["ruling"] == first["ruling"]["ruling"]
+
+
+def test_reindex_clears_faq_cache_and_replaces_chunks(sample_pdf, isolated_data):
+    pipeline = RefereePipeline()
+    upload = pipeline.upload_rulebook(
+        "Test Game",
+        "test.pdf",
+        sample_pdf.read_bytes(),
+        original_filename="sample-rulebook.pdf",
+    )
+    book_id = upload["rulebook"].id
+
+    lookup_key = ask_lookup_key("When can I trade?")
+    pipeline.faq_cache.put(
+        book_id,
+        lookup_key,
+        {
+            "rulebook_id": book_id,
+            "rulebook_name": "Test Game",
+            "question": "When can I trade?",
+            "ruling": {"ruling": "Cached", "needs_clarification": False},
+            "retrieval": {"chunks_found": 0, "pages": [], "sources": []},
+            "citation_check": {"all_valid": True, "issues": [], "citations": []},
+        },
+        label="When can I trade?",
+        mode="ask",
+    )
+
+    result = pipeline.reindex(book_id)
+    assert result["ingestion"]["chunks_indexed"] > 0
+    assert result["faq_cache_cleared"] == 1
+    assert pipeline.faq_cache.get(book_id, lookup_key) is None
 
 
 def test_pipeline_clear_faq_cache_forces_fresh_answer(

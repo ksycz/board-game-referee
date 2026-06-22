@@ -99,6 +99,34 @@ export type SourceExcerpt = {
   text: string;
 };
 
+export type SearchHit = {
+  page: number;
+  section: string | null;
+  text: string;
+  score: number | null;
+};
+
+export type SearchResponse = {
+  agent: string;
+  query: string;
+  hits: SearchHit[];
+};
+
+export function cleanSearchExcerpt(text: string): string {
+  let cleaned = text.replace(/\s+/g, " ").trim();
+  cleaned = cleaned.replace(/^(?:\d{1,3}\s+){2,}/, "");
+  cleaned = cleaned.replace(/^\d{1,2}\s+(?=[A-Z])/, "");
+  return cleaned.trim() || text.trim();
+}
+
+export function formatSearchExcerpt(text: string, maxLength = 160): string {
+  const cleaned = cleanSearchExcerpt(text);
+  if (cleaned.length <= maxLength) {
+    return cleaned;
+  }
+  return `${cleaned.slice(0, maxLength - 1)}…`;
+}
+
 export type HistoryMessage = {
   role: "user" | "assistant";
   content: string;
@@ -226,6 +254,7 @@ export type UploadResponse = {
   example_questions: string[];
   ingestion?: IngestionResult;
   already_exists?: boolean;
+  faq_cache_cleared?: number;
 };
 
 export function formatUploadSuccessMessage(name: string, ingestion?: IngestionResult): string {
@@ -246,11 +275,13 @@ export function formatUploadSuccessMessage(name: string, ingestion?: IngestionRe
 
 export function formatUploadProgressMessage(
   progress: UploadProgress,
-  source: "upload" | "bgg" = "upload",
+  source: "upload" | "bgg" | "reindex" = "upload",
 ): string {
   const { phase, page, total_pages } = progress;
   if (phase === "starting") {
-    return source === "bgg" ? "Downloading from BoardGameGeek…" : "Opening PDF…";
+    if (source === "bgg") return "Downloading from BoardGameGeek…";
+    if (source === "reindex") return "Re-opening PDF…";
+    return "Opening PDF…";
   }
   if (phase === "indexing") return "Building search index…";
   if (phase === "scanning" && total_pages > 0) {
@@ -312,6 +343,9 @@ function parseSseChunk(buffer: string): { events: UploadStreamEvent[]; rest: str
           rulebook: payload.rulebook as Rulebook,
           example_questions: (payload.example_questions as string[]) ?? [],
           ingestion: payload.ingestion as IngestionResult | undefined,
+          faq_cache_cleared: typeof payload.faq_cache_cleared === "number"
+            ? payload.faq_cache_cleared
+            : undefined,
         },
       });
     } else if (eventName === "duplicate") {
@@ -537,6 +571,22 @@ export async function fetchExampleQuestions(rulebookId: string): Promise<string[
   return data.questions ?? [];
 }
 
+export async function searchRulebook(
+  rulebookId: string,
+  query: string,
+  limit = 8,
+): Promise<SearchResponse> {
+  const res = await fetch(`${API}/api/rulebooks/${rulebookId}/search`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, limit }),
+  });
+  if (!res.ok) {
+    await throwIfNotOk(res, "Search failed");
+  }
+  return res.json();
+}
+
 export async function askRulebook(
   rulebookId: string,
   question: string,
@@ -611,6 +661,30 @@ export async function clearFaqCache(rulebookId: string): Promise<number> {
   }
   const payload = await res.json();
   return typeof payload.cleared === "number" ? payload.cleared : 0;
+}
+
+export async function reindexRulebook(
+  rulebookId: string,
+  onProgress?: (progress: UploadProgress) => void,
+): Promise<UploadResponse> {
+  const res = await fetch(`${API}/api/rulebooks/${rulebookId}/reindex-stream`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    await throwIfNotOk(res, "Could not re-scan this rulebook");
+  }
+  if (!res.body) {
+    throw new Error("Re-index failed — no response from server.");
+  }
+
+  const result = await readUploadStream(res.body, onProgress);
+  if (result.type === "complete") {
+    return result.data;
+  }
+  if (result.type === "error") {
+    throw new Error(result.message);
+  }
+  throw new Error("Re-index failed.");
 }
 
 export type RulingFeedbackPayload = {

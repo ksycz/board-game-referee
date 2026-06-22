@@ -12,7 +12,7 @@ from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
 from chromadb.config import Settings
 
 from config import CHROMA_DIR, ensure_dirs
-from services.pdf_parser import TextChunk
+from services.pdf_parser import TextChunk, chunk_has_substance_text, clean_chunk_text
 
 _DIM = 256
 
@@ -290,6 +290,52 @@ class VectorStore:
                 )
 
         ranked = sorted(merged.values(), key=lambda chunk: chunk.score or 0.0, reverse=True)
+        return self._apply_substance_boost(ranked[:top_k])
+
+    def keyword_search(self, rulebook_id: str, query: str, top_k: int) -> list[StoredChunk]:
+        """Keyword-only search across indexed chunks (no embeddings / LLM)."""
+        collection = self._collection(rulebook_id)
+        if collection.count() == 0:
+            return []
+
+        terms = _query_terms(query)
+        if not terms:
+            return []
+
+        all_result = collection.get(include=["documents", "metadatas"])
+        all_ids = all_result.get("ids") or []
+        all_documents = all_result.get("documents") or []
+        all_metadatas = all_result.get("metadatas") or []
+
+        term_doc_freq = dict.fromkeys(terms, 0)
+        chunk_rows: list[tuple[str, str, dict, str]] = []
+        for chunk_id, text, metadata in zip(all_ids, all_documents, all_metadatas, strict=False):
+            section_hint = metadata.get("section_hint") or None
+            clean_text = clean_chunk_text(text)
+            searchable = _searchable_text(clean_text, section_hint).lower()
+            chunk_rows.append((chunk_id, clean_text, metadata, searchable))
+            for term in terms:
+                if _term_matches(term, searchable):
+                    term_doc_freq[term] += 1
+
+        scored: list[StoredChunk] = []
+        for chunk_id, text, metadata, searchable in chunk_rows:
+            if not chunk_has_substance_text(text):
+                continue
+            score = _keyword_score(searchable, terms, term_doc_freq)
+            if score <= 0:
+                continue
+            scored.append(
+                StoredChunk(
+                    chunk_id=chunk_id,
+                    page=int(metadata.get("page", 0)),
+                    text=text,
+                    section_hint=metadata.get("section_hint") or None,
+                    score=score,
+                ),
+            )
+
+        ranked = sorted(scored, key=lambda chunk: chunk.score or 0.0, reverse=True)
         return self._apply_substance_boost(ranked[:top_k])
 
     def _substance_weight(self, text: str) -> float:

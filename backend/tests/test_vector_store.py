@@ -93,6 +93,52 @@ def test_reindex_replaces_existing_chunks(isolated_data):
     assert hits[0].page == 2
 
 
+def test_keyword_search_finds_matching_passages_without_vector_query(isolated_data):
+    vs = VectorStore()
+    rulebook_id = "keyword-only-book"
+    vs.index_rulebook(
+        rulebook_id,
+        [
+            TextChunk(page=1, text="Setup: each player draws five cards at the start."),
+            TextChunk(
+                page=4,
+                text="On your turn, choose one action. You may not attack on the first turn.",
+                section_hint="Turn Order",
+            ),
+        ],
+    )
+
+    hits = vs.keyword_search(rulebook_id, "first turn", top_k=3)
+
+    assert len(hits) == 1
+    assert hits[0].page == 4
+    assert "first turn" in hits[0].text.lower()
+
+
+def test_keyword_search_skips_number_heavy_junk(isolated_data):
+    vs = VectorStore()
+    rulebook_id = "keyword-junk-book"
+    vs.index_rulebook(
+        rulebook_id,
+        [
+            TextChunk(
+                page=5,
+                text="14 14 3 11 11 Shuffle the Lantern cards, reveal 3 of them, and lay them face-up.",
+            ),
+            TextChunk(
+                page=8,
+                text="At the end of your turn, you may discard one card to draw another from the deck.",
+            ),
+        ],
+    )
+
+    hits = vs.keyword_search(rulebook_id, "discard draw deck", top_k=3)
+
+    assert len(hits) == 1
+    assert hits[0].page == 8
+    assert hits[0].text.startswith("At the end of your turn")
+
+
 def test_search_deprioritizes_very_short_chunks(isolated_data):
     vs = VectorStore()
     rulebook_id = "substance-book"

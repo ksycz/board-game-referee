@@ -20,6 +20,7 @@ from services.pdf_parser import ensure_tesseract_path
 from services.bgg_fetch import BggError, lookup_rulebooks
 from services.bgg_upload_stream import stream_bgg_rulebook_upload
 from services.rulebook_store import DuplicateRulebookError
+from services.reindex_stream import stream_rulebook_reindex
 from services.upload_stream import stream_rulebook_upload
 
 ensure_dirs()
@@ -68,6 +69,11 @@ class DisputeRequest(BaseModel):
     player_b: str = Field(min_length=3, max_length=2000)
     history: list[HistoryMessage] = Field(default_factory=list, max_length=20)
     top_k: int | None = Field(default=None, ge=1, le=20)
+
+
+class SearchRequest(BaseModel):
+    query: str = Field(min_length=2, max_length=500)
+    limit: int | None = Field(default=None, ge=1, le=20)
 
 
 class PinRequest(BaseModel):
@@ -255,6 +261,18 @@ def pin_rulebook(rulebook_id: str, body: PinRequest):
     return asdict(book)
 
 
+@app.post("/api/rulebooks/{rulebook_id}/reindex-stream")
+async def reindex_rulebook_stream(rulebook_id: str):
+    return StreamingResponse(
+        stream_rulebook_reindex(pipeline, rulebook_id=rulebook_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 @app.delete("/api/rulebooks/{rulebook_id}/faq-cache")
 def clear_faq_cache(rulebook_id: str):
     try:
@@ -277,6 +295,20 @@ def rulebook_page_preview(rulebook_id: str, page: int):
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return Response(content=png_bytes, media_type="image/png")
+
+
+@app.post("/api/rulebooks/{rulebook_id}/search")
+def search_rulebook(rulebook_id: str, body: SearchRequest):
+    try:
+        return pipeline.quick_search(
+            rulebook_id,
+            body.query,
+            limit=body.limit or 8,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Rulebook not found") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/rulebooks/{rulebook_id}/ask")

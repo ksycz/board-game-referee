@@ -83,6 +83,18 @@ def _is_heading(line: str) -> bool:
     return title_like and len(words) <= 6
 
 
+def _strip_leading_layout_noise(text: str) -> str:
+    """Remove graphical-PDF step/page number prefixes before prose."""
+    stripped = text.strip()
+    cleaned = re.sub(r"^(?:\d{1,3}\s+){2,}", "", stripped)
+    cleaned = re.sub(r"^\d{1,2}\s+(?=[A-Z])", "", cleaned)
+    return cleaned.strip() or stripped
+
+
+def clean_chunk_text(text: str) -> str:
+    return _strip_leading_layout_noise(text)
+
+
 def _is_junk_paragraph(text: str) -> bool:
     """Drop page numbers, headers without body text, and other PDF noise."""
     stripped = text.strip()
@@ -128,11 +140,21 @@ def _indexable_char_count(text: str) -> int:
 
 def _chunk_has_substance(chunk: TextChunk) -> bool:
     """True when a chunk looks like real rules text, not layout noise."""
-    words = re.findall(r"\w+", chunk.text)
-    has_sentence = any(mark in chunk.text for mark in ".?!")
+    text = clean_chunk_text(chunk.text)
+    words = re.findall(r"\w+", text)
+    if not words:
+        return False
+    digit_only = sum(1 for word in words if word.isdigit())
+    if digit_only / len(words) > 0.4:
+        return False
+    has_sentence = any(mark in text for mark in ".?!")
     if len(words) >= 8:
         return True
-    return has_sentence and len(words) >= 5 and len(chunk.text) >= 30
+    return has_sentence and len(words) >= 5 and len(text) >= 30
+
+
+def chunk_has_substance_text(text: str) -> bool:
+    return _chunk_has_substance(TextChunk(page=0, text=text))
 
 
 def _page_needs_ocr(text: str, chunks: list[TextChunk]) -> bool:
@@ -322,10 +344,15 @@ def chunk_page_text(
         nonlocal current_parts, current_len
         if not current_parts:
             return
+        joined = clean_chunk_text("\n\n".join(current_parts))
+        if _is_junk_paragraph(joined):
+            current_parts = []
+            current_len = 0
+            return
         chunks.append(
             TextChunk(
                 page=page,
-                text="\n\n".join(current_parts),
+                text=joined,
                 section_hint=current_section,
             )
         )
@@ -338,13 +365,17 @@ def chunk_page_text(
                 flush()
             current_section = section
 
+        paragraph = clean_chunk_text(paragraph)
         if _is_junk_paragraph(paragraph):
             continue
 
         if len(paragraph) > max_chars:
             flush()
             for piece in _split_by_sentences(paragraph, max_chars):
-                chunks.append(TextChunk(page=page, text=piece, section_hint=current_section))
+                cleaned_piece = clean_chunk_text(piece)
+                if _is_junk_paragraph(cleaned_piece):
+                    continue
+                chunks.append(TextChunk(page=page, text=cleaned_piece, section_hint=current_section))
             continue
 
         extra = len(paragraph) + (2 if current_parts else 0)
@@ -355,7 +386,7 @@ def chunk_page_text(
         current_len += extra
 
     flush()
-    return [chunk for chunk in chunks if not _is_junk_paragraph(chunk.text)]
+    return [chunk for chunk in chunks if chunk_has_substance_text(chunk.text)]
 
 
 def extract_chunks(

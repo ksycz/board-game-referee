@@ -10,6 +10,10 @@ import {
   SourceExcerpt,
   askRulebook,
   clearFaqCache,
+  reindexRulebook,
+  searchRulebook,
+  formatSearchExcerpt,
+  cleanSearchExcerpt,
   deleteRulebook,
   disputeRulebook,
   fetchExampleQuestions,
@@ -28,6 +32,7 @@ import {
   uploadRulebook,
   type UploadProgress,
   type RulebookHealthSummary,
+  type SearchHit,
 } from "./api";
 import {
   IconBook,
@@ -59,7 +64,7 @@ import {
   type StoredMessage,
 } from "./conversationStorage";
 
-type ChatMode = "ask" | "dispute";
+type ChatMode = "ask" | "search" | "dispute";
 
 type Message = StoredMessage;
 
@@ -188,15 +193,21 @@ export default function App() {
   const [bggLookupLoading, setBggLookupLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [ingestSource, setIngestSource] = useState<"upload" | "reindex">("upload");
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [error, setError] = useState<AppError | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [uploadHealth, setUploadHealth] = useState<RulebookHealthSummary | null>(null);
+  const [quickSearchQuery, setQuickSearchQuery] = useState("");
+  const [quickSearchHits, setQuickSearchHits] = useState<SearchHit[] | null>(null);
+  const [quickSearchLoading, setQuickSearchLoading] = useState(false);
+  const [quickSearchSelected, setQuickSearchSelected] = useState<number | null>(null);
   const [showAllRulebooks, setShowAllRulebooks] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => loadSidebarCollapsed());
   const [overlayDismissTick, setOverlayDismissTick] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const quickSearchInputRef = useRef<HTMLInputElement>(null);
   const disputeSituationRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -298,6 +309,19 @@ export default function App() {
   }, [clarification]);
 
   useEffect(() => {
+    setQuickSearchQuery("");
+    setQuickSearchHits(null);
+    setQuickSearchLoading(false);
+    setQuickSearchSelected(null);
+  }, [selectedId]);
+
+  useEffect(() => {
+    if (overlayDismissTick > 0) {
+      setQuickSearchSelected(null);
+    }
+  }, [overlayDismissTick]);
+
+  useEffect(() => {
     if (!libraryOpen) {
       return;
     }
@@ -359,7 +383,9 @@ export default function App() {
 
       if (event.key === "/" && selectedId) {
         event.preventDefault();
-        if (chatMode === "ask") {
+        if (chatMode === "search") {
+          quickSearchInputRef.current?.focus();
+        } else if (chatMode === "ask") {
           inputRef.current?.focus();
         } else {
           disputeSituationRef.current?.focus();
@@ -388,6 +414,12 @@ export default function App() {
     setClarificationFor,
     sidebarCollapsed,
   ]);
+
+  useEffect(() => {
+    if (chatMode === "search") {
+      quickSearchInputRef.current?.focus();
+    }
+  }, [chatMode, selectedId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -447,10 +479,13 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
+    setIngestSource("upload");
     setUploadProgress({ phase: "starting", page: 0, total_pages: 0 });
     setError(null);
     setInfo(null);
     setUploadHealth(null);
+    setBggCandidates(null);
+    setBggUrl("");
     try {
       const upload = await uploadRulebook(file, uploadName || undefined, (progress) => {
         setUploadProgress(progress);
@@ -640,6 +675,60 @@ export default function App() {
     }
   }
 
+  async function handleQuickSearch(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedId || !quickSearchQuery.trim()) {
+      return;
+    }
+    setQuickSearchLoading(true);
+    setQuickSearchSelected(null);
+    setError(null);
+    try {
+      const result = await searchRulebook(selectedId, quickSearchQuery.trim());
+      setQuickSearchHits(result.hits);
+    } catch (err) {
+      setQuickSearchHits(null);
+      setError(toAppError(err));
+    } finally {
+      setQuickSearchLoading(false);
+    }
+  }
+
+  async function handleReindex(id: string, name: string) {
+    if (
+      !confirm(
+        `Re-scan "${name}" from the stored PDF? This rebuilds the search index and clears cached answers.`,
+      )
+    ) {
+      return;
+    }
+    setUploading(true);
+    setIngestSource("reindex");
+    setUploadProgress({ phase: "starting", page: 0, total_pages: 0 });
+    setError(null);
+    setInfo(null);
+    setUploadHealth(null);
+    try {
+      const result = await reindexRulebook(id, (progress) => {
+        setUploadProgress(progress);
+      });
+      setExamples((current) => ({
+        ...current,
+        [id]: result.example_questions,
+      }));
+      await refresh();
+      setUploadHealth(buildRulebookHealthSummary(result.rulebook.name, result.ingestion));
+      if ((result.faq_cache_cleared ?? 0) > 0) {
+        setInfo(`Cleared ${result.faq_cache_cleared} cached answer(s) for this game.`);
+      }
+    } catch (err) {
+      setError(toAppError(err));
+    } finally {
+      setUploading(false);
+      setUploadProgress(null);
+    }
+  }
+
   async function handleDelete(id: string) {
     if (!confirm("Delete this rulebook?")) return;
     setLoading(true);
@@ -699,8 +788,30 @@ export default function App() {
         </div>
       </header>
 
-      {(error || info || uploadHealth) && (
+      {(error || info || uploadHealth || (uploading && uploadProgress)) && (
         <div className="app-notice" role="status">
+          {uploading && uploadProgress && (
+            <div className="notice-banner info ingest-progress-banner" aria-live="polite">
+              <div className="notice-banner-copy">
+                <p className="notice-banner-title">
+                  {ingestSource === "reindex" ? "Re-scanning rulebook" : "Processing rulebook"}
+                </p>
+                <p>{formatUploadProgressMessage(uploadProgress, ingestSource)}</p>
+                <div
+                  className="upload-progress-track"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={uploadProgressPercent(uploadProgress)}
+                >
+                  <div
+                    className="upload-progress-bar"
+                    style={{ width: `${uploadProgressPercent(uploadProgress)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
           {uploadHealth && (
             <RulebookHealthNotice
               health={uploadHealth}
@@ -843,7 +954,7 @@ export default function App() {
             {uploading && uploadProgress && (
               <div className="upload-progress" role="status" aria-live="polite">
                 <p className="upload-progress-label">
-                  {formatUploadProgressMessage(uploadProgress)}
+                  {formatUploadProgressMessage(uploadProgress, ingestSource)}
                 </p>
                 <div
                   className="upload-progress-track"
@@ -1007,7 +1118,9 @@ export default function App() {
                     <span className="chat-subtitle">
                       {chatMode === "ask"
                         ? "Ask about timing, edge cases, disputes…"
-                        : "Two players disagree — let the referee decide"}
+                        : chatMode === "search"
+                          ? "Search indexed passages — no LLM call"
+                          : "Two players disagree — let the referee decide"}
                     </span>
                   </div>
                   <div className="chat-header-actions">
@@ -1020,6 +1133,15 @@ export default function App() {
                         onClick={() => setChatMode("ask")}
                       >
                         Ask
+                      </button>
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={chatMode === "search"}
+                        className={chatMode === "search" ? "active" : ""}
+                        onClick={() => setChatMode("search")}
+                      >
+                        Search
                       </button>
                       <button
                         type="button"
@@ -1041,7 +1163,18 @@ export default function App() {
                       </button>
                       <button
                         type="button"
+                        className="reindex-rulebook"
+                        disabled={uploading || loading}
+                        onClick={() => {
+                          void handleReindex(selected.id, selected.name);
+                        }}
+                      >
+                        {uploading && ingestSource === "reindex" ? "Scanning…" : "Scan again"}
+                      </button>
+                      <button
+                        type="button"
                         className="clear-faq-cache"
+                        disabled={uploading || loading}
                         onClick={() => {
                           void handleClearFaqCache(selected.id, selected.name);
                         }}
@@ -1053,7 +1186,25 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="messages" aria-busy={loading} aria-live="polite">
+              <div className={`messages${chatMode === "search" ? " search-mode" : ""}`} aria-busy={loading || uploading} aria-live="polite">
+                {chatMode === "search" ? (
+                  <QuickSearchPanel
+                    query={quickSearchQuery}
+                    hits={quickSearchHits}
+                    loading={quickSearchLoading}
+                    selectedIndex={quickSearchSelected}
+                    disabled={loading || uploading}
+                    inputRef={quickSearchInputRef}
+                    standalone
+                    onQueryChange={setQuickSearchQuery}
+                    onSubmit={(event) => {
+                      void handleQuickSearch(event);
+                    }}
+                    onSelectHit={setQuickSearchSelected}
+                    rulebookId={selected.id}
+                  />
+                ) : (
+                  <>
                 {messages.length === 0 && exampleQuestions.length > 0 && chatMode === "ask" && (
                   <div className="example-questions">
                     <p className="example-questions-label">Try asking</p>
@@ -1130,8 +1281,11 @@ export default function App() {
                   </div>
                 )}
                 <div ref={messagesEndRef} className="messages-anchor" aria-hidden="true" />
+                  </>
+                )}
               </div>
 
+              {chatMode !== "search" && (
               <div className="chat-composer">
                 {clarification && (
                   <div className="clarification-prompt" role="status">
@@ -1162,7 +1316,7 @@ export default function App() {
                       }
                       disabled={loading}
                     />
-                    <button type="submit" disabled={loading || !question.trim()}>
+                    <button type="submit" disabled={loading || uploading || !question.trim()}>
                       {loading ? "Thinking…" : clarification ? "Send detail" : "Ask"}
                     </button>
                   </form>
@@ -1223,6 +1377,7 @@ export default function App() {
                   </form>
                 )}
               </div>
+              )}
             </>
           )}
         </main>
@@ -1318,6 +1473,142 @@ function RefereeAnswer({
         </summary>
         <pre>{JSON.stringify(data, null, 2)}</pre>
       </details>
+    </div>
+  );
+}
+
+function QuickSearchPanel({
+  rulebookId,
+  query,
+  hits,
+  loading,
+  selectedIndex,
+  disabled,
+  inputRef,
+  standalone = false,
+  onQueryChange,
+  onSubmit,
+  onSelectHit,
+}: {
+  rulebookId: string;
+  query: string;
+  hits: SearchHit[] | null;
+  loading: boolean;
+  selectedIndex: number | null;
+  disabled: boolean;
+  inputRef?: React.RefObject<HTMLInputElement | null>;
+  standalone?: boolean;
+  onQueryChange: (value: string) => void;
+  onSubmit: (event: React.FormEvent) => void;
+  onSelectHit: (index: number | null) => void;
+}) {
+  const selected = selectedIndex !== null ? hits?.[selectedIndex] ?? null : null;
+
+  return (
+    <section
+      className={`quick-search${standalone ? " quick-search-standalone" : ""}`}
+      aria-label="Quick search"
+    >
+      <div className="quick-search-header">
+        <p className="quick-search-title">Search this rulebook</p>
+        <p className="quick-search-hint">
+          Find indexed passages before asking the referee — no LLM call.
+        </p>
+      </div>
+      <form className="quick-search-form" onSubmit={onSubmit}>
+        <input
+          ref={inputRef}
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          placeholder="e.g. setup, first turn, tie breaker"
+          disabled={disabled || loading}
+          minLength={2}
+        />
+        <button type="submit" disabled={disabled || loading || query.trim().length < 2}>
+          {loading ? "Searching…" : "Search"}
+        </button>
+      </form>
+      {hits && (
+        <div className="quick-search-results" role="status">
+          {hits.length === 0 ? (
+            <p className="quick-search-empty">No passages matched those terms.</p>
+          ) : (
+            <ul className="quick-search-list">
+              {hits.map((hit, index) => {
+                const isSelected = selectedIndex === index;
+                return (
+                  <li key={`${hit.page}-${index}`}>
+                    <button
+                      type="button"
+                      className={`quick-search-hit${isSelected ? " selected" : ""}`}
+                      aria-expanded={isSelected}
+                      onClick={() => onSelectHit(isSelected ? null : index)}
+                    >
+                      <span className="quick-search-hit-label">
+                        Page {hit.page}
+                        {hit.section ? ` · ${hit.section}` : ""}
+                      </span>
+                      <span className="quick-search-hit-excerpt">
+                        {formatSearchExcerpt(hit.text)}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+      {selected && (
+        <QuickSearchHitPanel
+          rulebookId={rulebookId}
+          hit={selected}
+          onClose={() => onSelectHit(null)}
+        />
+      )}
+    </section>
+  );
+}
+
+function QuickSearchHitPanel({
+  rulebookId,
+  hit,
+  onClose,
+}: {
+  rulebookId: string;
+  hit: SearchHit;
+  onClose: () => void;
+}) {
+  const [previewFailed, setPreviewFailed] = useState(false);
+  const previewUrl = rulebookPagePreviewUrl(rulebookId, hit.page);
+
+  return (
+    <div className="source-panel" role="region" aria-label="Search result excerpt">
+      <div className="source-panel-header">
+        <div>
+          <p className="source-panel-title">Rulebook passage</p>
+          <p className="source-panel-meta">
+            Page {hit.page}
+            {hit.section ? ` · ${hit.section}` : ""}
+          </p>
+        </div>
+        <button type="button" className="source-panel-close" onClick={onClose}>
+          Close
+        </button>
+      </div>
+      <div className="source-panel-content">
+        {!previewFailed && (
+          <figure className="source-panel-preview">
+            <img
+              src={previewUrl}
+              alt={`Rulebook page ${hit.page}`}
+              loading="lazy"
+              onError={() => setPreviewFailed(true)}
+            />
+          </figure>
+        )}
+        <blockquote className="source-panel-excerpt">{cleanSearchExcerpt(hit.text)}</blockquote>
+      </div>
     </div>
   );
 }
