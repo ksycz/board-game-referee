@@ -33,6 +33,7 @@ FAQ_CACHE_ENABLED = _faq_cache in ("1", "true", "yes", "on")
 FAQ_CACHE_MAX_ENTRIES = int(os.getenv("FAQ_CACHE_MAX_ENTRIES", "100"))
 
 MAX_PDF_BYTES = int(os.getenv("MAX_PDF_BYTES", str(50 * 1024 * 1024)))
+MAX_PDF_PAGES = int(os.getenv("MAX_PDF_PAGES", "500"))
 
 _ocr_fallback = os.getenv("OCR_FALLBACK", "0").strip().lower()
 OCR_FALLBACK = _ocr_fallback in ("1", "true", "yes", "on")

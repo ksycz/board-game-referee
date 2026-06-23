@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import uuid
 from dataclasses import asdict
@@ -15,13 +16,17 @@ from pydantic import BaseModel, Field
 from agents.pipeline import RefereePipeline
 from config import CORS_ORIGINS, DATA_DIR, MODEL, OCR_FALLBACK, ensure_dirs
 from errors import RateLimitError
+from services.frontend_static import resolve_frontend_asset
+from services.http_errors import GENERIC_BGG_LOOKUP_ERROR, server_error
 from services.pdf_parser import ensure_tesseract_path
 from services.bgg_fetch import BggError, lookup_rulebooks
 from services.bgg_upload_stream import stream_bgg_rulebook_upload
 from services.rulebook_store import DuplicateRulebookError
 from services.reindex_stream import stream_rulebook_reindex
 from services.upload_stream import stream_rulebook_upload
-from services.upload_utils import ensure_pdf_size, safe_stored_filename
+from services.upload_utils import read_bounded_pdf_upload, safe_stored_filename
+
+logger = logging.getLogger(__name__)
 
 ensure_dirs()
 
@@ -33,10 +38,21 @@ def rate_limit_http_exception(exc: RateLimitError) -> HTTPException:
     )
 
 
+def _e2e_stub_enabled() -> bool:
+    flag = os.getenv("E2E_STUB_LLM", "").strip().lower()
+    if flag not in ("1", "true", "yes", "on"):
+        return False
+    env = os.getenv("ENVIRONMENT", "").strip().lower()
+    if env in ("production", "prod"):
+        logger.warning("E2E_STUB_LLM is set but ignored in production")
+        return False
+    return True
+
+
 app = FastAPI(title="Board Game Rules Referee", version="0.1.0")
 pipeline = RefereePipeline()
 
-if os.getenv("E2E_STUB_LLM", "").strip().lower() in ("1", "true", "yes", "on"):
+if _e2e_stub_enabled():
     from e2e_stub import install_stub_referee
 
     install_stub_referee(pipeline)
@@ -46,7 +62,7 @@ FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -95,7 +111,7 @@ class BggLookupRequest(BaseModel):
 
 
 class BggImportRequest(BaseModel):
-    file_id: str = Field(min_length=1, max_length=32)
+    file_id: str = Field(min_length=1, max_length=32, pattern=r"^\d+$")
     filename: str | None = Field(default=None, max_length=255)
     name: str | None = Field(default=None, max_length=120)
     bgg_url: str | None = Field(default=None, max_length=500)
@@ -109,11 +125,8 @@ async def _read_upload_pdf(file: UploadFile) -> tuple[bytes, str]:
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF rulebooks are supported")
 
-    content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Empty file")
     try:
-        ensure_pdf_size(content)
+        content = await read_bounded_pdf_upload(file)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return content, file.filename
@@ -151,7 +164,8 @@ def bgg_lookup(body: BggLookupRequest):
     except BggError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Could not look up game on BoardGameGeek: {exc}") from exc
+        logger.exception("BGG lookup failed")
+        raise HTTPException(status_code=400, detail=GENERIC_BGG_LOOKUP_ERROR) from exc
 
 
 @app.post("/api/rulebooks/bgg/upload-stream")
@@ -234,7 +248,7 @@ async def upload_rulebook(
             },
         ) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise server_error("rulebook upload", exc)
 
     return {
         "rulebook": asdict(result["rulebook"]),
@@ -298,8 +312,8 @@ def rulebook_page_preview(rulebook_id: str, page: int, zoom: float = 1.5):
         raise HTTPException(status_code=404, detail="Rulebook not found")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Rulebook not found") from None
     return Response(content=png_bytes, media_type="image/png")
 
 
@@ -329,7 +343,7 @@ def ask_rulebook(rulebook_id: str, body: AskRequest):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise server_error("ask", exc)
 
 
 @app.post("/api/rulebooks/{rulebook_id}/feedback")
@@ -360,7 +374,7 @@ def dispute_rulebook(rulebook_id: str, body: DisputeRequest):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise server_error("dispute", exc)
 
 
 if FRONTEND_DIR.exists():
@@ -390,7 +404,8 @@ if FRONTEND_DIR.exists():
     def spa(full_path: str):
         if full_path.startswith("api/"):
             raise HTTPException(status_code=404)
-        candidate = FRONTEND_DIR / full_path
-        if candidate.is_file():
-            return FileResponse(candidate)
-        return FileResponse(FRONTEND_DIR / "index.html")
+        try:
+            asset = resolve_frontend_asset(FRONTEND_DIR, full_path)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="Not found") from None
+        return FileResponse(asset)

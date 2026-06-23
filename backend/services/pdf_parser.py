@@ -16,6 +16,7 @@ import fitz
 from config import (
     CHUNK_MAX_CHARS,
     CHUNK_MIN_CHARS,
+    MAX_PDF_PAGES,
     OCR_DPI,
     OCR_FALLBACK,
     OCR_LANGUAGE,
@@ -406,6 +407,11 @@ def extract_chunks(
     ocr_pages = 0
     thin_pages: list[int] = []
     total_pages = len(doc)
+    if total_pages > MAX_PDF_PAGES:
+        doc.close()
+        raise ValueError(
+            f"PDF has too many pages ({total_pages}; max {MAX_PDF_PAGES})."
+        )
     if OCR_FALLBACK:
         ensure_tesseract_path()
     _emit_progress(

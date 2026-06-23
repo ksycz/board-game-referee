@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from config import BGG_API_TOKEN
-from services.upload_utils import ensure_pdf_size
+from services.upload_utils import ensure_pdf_magic, ensure_pdf_size
 
 BGG_BASE = "https://boardgamegeek.com"
 BGG_FILES_API = f"{BGG_BASE}/api/files"
@@ -175,6 +175,9 @@ def download_rulebook_pdf(
     filename_hint: str | None = None,
     bgg_url: str | None = None,
 ) -> tuple[bytes, str]:
+    if not file_id.isdigit():
+        raise BggError("Invalid BGG file id.")
+
     download_url = f"{BGG_BASE}/file/download/{file_id}"
     help_url = bgg_url or download_url
     headers: dict[str, str] = {
@@ -199,12 +202,14 @@ def download_rulebook_pdf(
     except urllib.error.URLError as exc:
         raise BggError(f"Could not reach BoardGameGeek: {exc.reason}") from exc
 
-    if not data.startswith(b"%PDF"):
+    try:
+        ensure_pdf_magic(data)
+    except ValueError as exc:
         raise BggDownloadError(
             "BoardGameGeek blocks server-side PDF downloads. "
             "Open the file in your browser, download the PDF, then upload it here.",
             bgg_url=help_url,
-        )
+        ) from exc
 
     try:
         ensure_pdf_size(data)
