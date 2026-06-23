@@ -15,6 +15,12 @@ test("upload sample PDF, ask a question, and show a citation", async ({ page }) 
     timeout: 60_000,
   });
 
+  await expect(page.getByText("Tableside rules engine")).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Rules Referee/i })).toBeVisible();
+  await expect(
+    page.getByText("Settle arguments with cited rulings — upload a rulebook and roll.")
+  ).toBeVisible();
+
   const question = "Can I attack on the first turn?";
   await page.getByPlaceholder("Ask a rules question…").fill(question);
   await page.getByRole("button", { name: "Ask" }).click();

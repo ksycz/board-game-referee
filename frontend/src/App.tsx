@@ -189,6 +189,37 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return target.isContentEditable;
 }
 
+function AppBrandHeader({
+  demoMode,
+  fullAccess,
+}: {
+  demoMode: boolean;
+  fullAccess: boolean;
+}) {
+  return (
+    <>
+      <div className="brand-mark" aria-hidden="true">
+        <IconScales className="icon icon-lg" />
+      </div>
+      <div className="brand-copy">
+        <p className="brand-eyebrow">Tableside rules engine</p>
+        <h1>
+          <span className="brand-title-main">Rules</span>
+          <span className="brand-title-accent">Referee</span>
+        </h1>
+        <p>
+          {demoMode && !fullAccess
+            ? "Try the sample rulebook — ask questions and see cited rulings."
+            : "Settle arguments with cited rulings — upload a rulebook and roll."}
+        </p>
+      </div>
+      <div className="header-dice" aria-hidden="true">
+        <IconDice className="icon icon-lg" />
+      </div>
+    </>
+  );
+}
+
 export default function App({
   fullAccess = true,
   demoMode = false,
@@ -230,7 +261,7 @@ export default function App({
   const inputRef = useRef<HTMLInputElement>(null);
   const quickSearchInputRef = useRef<HTMLInputElement>(null);
   const disputeSituationRef = useRef<HTMLTextAreaElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false);
   const activeRequestRulebookRef = useRef<string | null>(null);
 
@@ -468,7 +499,11 @@ export default function App({
   }, [chatMode, selectedId]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    const container = messagesContainerRef.current;
+    if (!container) {
+      return;
+    }
+    container.scrollTop = container.scrollHeight;
   }, [messages.length, loading, selectedId]);
 
   useEffect(() => {
@@ -913,27 +948,10 @@ export default function App({
   }
 
   return (
-    <div className={`app${selected ? " app-in-session" : ""}`}>
+    <div className={`app${selected ? " app-active" : ""}`}>
       <div className="table-rail table-rail-top" aria-hidden="true" />
       <header className="site-header panel">
-        <div className="brand-mark" aria-hidden="true">
-          <IconScales className="icon icon-lg" />
-        </div>
-        <div className="brand-copy">
-          <p className="brand-eyebrow">Tableside rules engine</p>
-          <h1>
-            <span className="brand-title-main">Rules</span>
-            <span className="brand-title-accent">Referee</span>
-          </h1>
-          <p>
-            {demoMode && !fullAccess
-              ? "Try the sample rulebook — ask questions and see cited rulings."
-              : "Settle arguments with cited rulings — upload a rulebook and roll."}
-          </p>
-        </div>
-        <div className="header-dice" aria-hidden="true">
-          <IconDice className="icon icon-lg" />
-        </div>
+        <AppBrandHeader demoMode={demoMode} fullAccess={fullAccess} />
       </header>
 
       {demoMode && !fullAccess && (
@@ -999,18 +1017,21 @@ export default function App({
           />
         )}
 
-        {sidebarCollapsed && (
-          <button
-            type="button"
-            className="sidebar-expand-rail"
-            aria-label="Show library panel"
-            title="Show library panel"
-            onClick={showLibraryPanel}
-          >
-            <IconLibrary className="icon" />
-          </button>
-        )}
-
+        {sidebarCollapsed ? (
+          <aside className="sidebar panel sidebar-rail" aria-label="Library">
+            <div className="sidebar-desktop-header sidebar-rail-header">
+              <button
+                type="button"
+                className="sidebar-expand-rail"
+                aria-label="Show library panel"
+                title="Show library panel"
+                onClick={showLibraryPanel}
+              >
+                <IconLibrary className="icon icon-sm" />
+              </button>
+            </div>
+          </aside>
+        ) : (
         <aside className={`sidebar panel${libraryOpen ? " open" : ""}`}>
           <div className="sidebar-desktop-header">
             <h2>Library</h2>
@@ -1304,8 +1325,13 @@ export default function App({
             </section>
           )}
         </aside>
+        )}
 
-        <main className="chat panel">
+        <main
+          className={`chat panel${
+            selected && chatMode === "dispute" && messages.length === 0 ? " chat-dispute-idle" : ""
+          }`}
+        >
           {!selected ? (
             <div className="empty-state">
               <div className="empty-dice" aria-hidden="true">
@@ -1346,7 +1372,6 @@ export default function App({
               <div className="chat-header">
                 <div className="chat-header-row">
                   <div className="chat-header-title">
-                    <span className="chat-app-brand">Rules Referee</span>
                     <h2>{selected.name}</h2>
                     <span className="chat-subtitle">
                       {chatMode === "ask"
@@ -1423,7 +1448,12 @@ export default function App({
                 </div>
               </div>
 
-              <div className={`messages${chatMode === "search" ? " search-mode" : ""}`} aria-busy={loading || uploading} aria-live="polite">
+              <div
+                ref={messagesContainerRef}
+                className={`messages${chatMode === "search" ? " search-mode" : ""}`}
+                aria-busy={loading || uploading}
+                aria-live="polite"
+              >
                 {chatMode === "search" ? (
                   <QuickSearchPanel
                     query={quickSearchQuery}
@@ -1517,7 +1547,6 @@ export default function App({
                     </div>
                   </div>
                 )}
-                <div ref={messagesEndRef} className="messages-anchor" aria-hidden="true" />
                   </>
                 )}
               </div>
