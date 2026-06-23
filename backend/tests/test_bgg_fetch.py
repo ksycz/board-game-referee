@@ -60,8 +60,17 @@ def test_download_rulebook_pdf_rejects_html_login_page(monkeypatch):
     class FakeResponse:
         headers = {"Content-Type": "text/html; charset=UTF-8"}
 
-        def read(self):
-            return b"<!DOCTYPE html><html><title>Just a moment</title>"
+        def __init__(self) -> None:
+            self._data = b"<!DOCTYPE html><html><title>Just a moment</title>"
+            self._done = False
+
+        def read(self, size: int = -1):
+            if self._done:
+                return b""
+            self._done = True
+            if size < 0:
+                return self._data
+            return self._data[:size]
 
         def __enter__(self):
             return self

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 import uuid
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
@@ -55,6 +56,7 @@ class RulebookStore:
         ensure_dirs()
         self._index_path = RULEBOOKS_DIR / "index.json"
         self._rulebooks: dict[str, Rulebook] = {}
+        self._lock = threading.Lock()
         self._load()
 
     def _load(self) -> None:
@@ -69,64 +71,73 @@ class RulebookStore:
             self._rulebooks[book.id] = book
 
     def _save(self) -> None:
+        with self._lock:
+            self._save_unlocked()
+
+    def _backfill_content_hashes(self) -> None:
+        with self._lock:
+            changed = False
+            for book in self._rulebooks.values():
+                if book.content_hash:
+                    continue
+                pdf_path = resolve_rulebook_pdf_path(book.filename)
+                if not pdf_path.exists():
+                    continue
+                book.content_hash = pdf_content_hash(pdf_path.read_bytes())
+                changed = True
+            if changed:
+                self._save_unlocked()
+
+    def _save_unlocked(self) -> None:
         payload = [asdict(book) for book in self._rulebooks.values()]
-        temp_path = self._index_path.with_suffix(".json.tmp")
+        temp_path = self._index_path.with_name(f"index.{uuid.uuid4()}.tmp")
         temp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         temp_path.replace(self._index_path)
 
-    def _backfill_content_hashes(self) -> None:
-        changed = False
-        for book in self._rulebooks.values():
-            if book.content_hash:
-                continue
-            pdf_path = resolve_rulebook_pdf_path(book.filename)
-            if not pdf_path.exists():
-                continue
-            book.content_hash = pdf_content_hash(pdf_path.read_bytes())
-            changed = True
-        if changed:
-            self._save()
-
     def find_by_content_hash(self, content_hash: str) -> Rulebook | None:
         self._backfill_content_hashes()
-        for book in self._rulebooks.values():
-            if book.content_hash == content_hash:
-                return book
+        with self._lock:
+            for book in self._rulebooks.values():
+                if book.content_hash == content_hash:
+                    return book
         return None
 
     def list(self) -> list[Rulebook]:
-        changed = False
         self._backfill_content_hashes()
-        for book in self._rulebooks.values():
-            if not looks_like_filename(book.name):
-                continue
-            pdf_path = resolve_rulebook_pdf_path(book.filename)
-            if not pdf_path.exists():
-                continue
-            resolved = extract_game_name_from_pdf(pdf_path)
-            if not resolved:
-                resolved = prettify_filename_stem(book.name)
-            if resolved and resolved != book.name:
-                book.name = resolved
-                changed = True
-        if changed:
-            self._save()
-        return sorted(
-            self._rulebooks.values(),
-            key=lambda book: (book.pinned, book.created_at),
-            reverse=True,
-        )
+        with self._lock:
+            changed = False
+            for book in self._rulebooks.values():
+                if not looks_like_filename(book.name):
+                    continue
+                pdf_path = resolve_rulebook_pdf_path(book.filename)
+                if not pdf_path.exists():
+                    continue
+                resolved = extract_game_name_from_pdf(pdf_path)
+                if not resolved:
+                    resolved = prettify_filename_stem(book.name)
+                if resolved and resolved != book.name:
+                    book.name = resolved
+                    changed = True
+            if changed:
+                self._save_unlocked()
+            return sorted(
+                self._rulebooks.values(),
+                key=lambda book: (book.pinned, book.created_at),
+                reverse=True,
+            )
 
     def get(self, rulebook_id: str) -> Rulebook | None:
-        return self._rulebooks.get(rulebook_id)
+        with self._lock:
+            return self._rulebooks.get(rulebook_id)
 
     def set_pinned(self, rulebook_id: str, pinned: bool) -> Rulebook | None:
-        book = self._rulebooks.get(rulebook_id)
-        if not book:
-            return None
-        book.pinned = pinned
-        self._save()
-        return book
+        with self._lock:
+            book = self._rulebooks.get(rulebook_id)
+            if not book:
+                return None
+            book.pinned = pinned
+            self._save_unlocked()
+            return book
 
     def add(
         self,
@@ -137,27 +148,29 @@ class RulebookStore:
         content_hash: str,
         demo: bool = False,
     ) -> Rulebook:
-        book = Rulebook(
-            id=str(uuid.uuid4()),
-            name=name,
-            filename=safe_stored_filename(filename),
-            page_count=page_count,
-            created_at=datetime.now(UTC).isoformat(),
-            content_hash=content_hash,
-            demo=demo,
-        )
-        self._rulebooks[book.id] = book
-        self._save()
+        with self._lock:
+            book = Rulebook(
+                id=str(uuid.uuid4()),
+                name=name,
+                filename=safe_stored_filename(filename),
+                page_count=page_count,
+                created_at=datetime.now(UTC).isoformat(),
+                content_hash=content_hash,
+                demo=demo,
+            )
+            self._rulebooks[book.id] = book
+            self._save_unlocked()
         return book
 
     def delete(self, rulebook_id: str) -> bool:
-        book = self._rulebooks.pop(rulebook_id, None)
-        if not book:
-            return False
+        with self._lock:
+            book = self._rulebooks.pop(rulebook_id, None)
+            if not book:
+                return False
+            self._save_unlocked()
         pdf_path = resolve_rulebook_pdf_path(book.filename)
         if pdf_path.exists():
             pdf_path.unlink()
-        self._save()
         return True
 
     def pdf_path(self, rulebook_id: str) -> Path:

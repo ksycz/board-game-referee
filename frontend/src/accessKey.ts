@@ -22,6 +22,9 @@ export function getAccessKey(): string {
   if (stored) {
     return stored;
   }
+  if (!import.meta.env.DEV) {
+    return "";
+  }
   return import.meta.env.VITE_API_ACCESS_KEY?.trim() ?? "";
 }
 

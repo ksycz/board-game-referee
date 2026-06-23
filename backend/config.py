@@ -73,7 +73,12 @@ PRESEED_DEMO_RULEBOOK = _env_bool("PRESEED_DEMO_RULEBOOK", _preseed_default)
 
 
 def _rate_limit_default_enabled() -> bool:
-    return IS_PRODUCTION or bool(API_ACCESS_KEY)
+    return (
+        IS_PRODUCTION
+        or bool(API_ACCESS_KEY)
+        or DEMO_MODE
+        or bool(ANTHROPIC_API_KEY)
+    )
 
 
 RATE_LIMIT_ENABLED = _env_bool("RATE_LIMIT_ENABLED", _rate_limit_default_enabled())

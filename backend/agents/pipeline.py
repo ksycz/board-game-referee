@@ -42,6 +42,12 @@ def _reindex_lock(rulebook_id: str) -> threading.Lock:
         return lock
 
 
+def _ensure_not_reindexing(rulebook_id: str) -> None:
+    lock = _reindex_lock(rulebook_id)
+    if lock.locked():
+        raise ValueError("This rulebook is being re-indexed. Try again in a moment.")
+
+
 class RefereePipeline:
     def __init__(
         self,
@@ -173,6 +179,7 @@ class RefereePipeline:
     def quick_search(self, rulebook_id: str, query: str, *, limit: int = 8) -> dict:
         if not self.store.get(rulebook_id):
             raise KeyError(f"Rulebook not found: {rulebook_id}")
+        _ensure_not_reindexing(rulebook_id)
         trimmed = query.strip()
         if len(trimmed) < 2:
             raise ValueError("Enter at least two characters to search.")
@@ -188,6 +195,8 @@ class RefereePipeline:
         book = self.store.get(rulebook_id)
         if not book:
             raise KeyError(f"Rulebook not found: {rulebook_id}")
+
+        _ensure_not_reindexing(rulebook_id)
 
         prior = trim_history(history or [])
         if not prior:
@@ -238,6 +247,8 @@ class RefereePipeline:
         book = self.store.get(rulebook_id)
         if not book:
             raise KeyError(f"Rulebook not found: {rulebook_id}")
+
+        _ensure_not_reindexing(rulebook_id)
 
         prior = trim_history(history or [])
         if not prior:

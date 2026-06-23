@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from config import BGG_API_TOKEN
-from services.upload_utils import ensure_pdf_magic, ensure_pdf_size
+from services.upload_utils import ensure_pdf_magic, ensure_pdf_size, read_bounded_http_body
 
 BGG_BASE = "https://boardgamegeek.com"
 BGG_FILES_API = f"{BGG_BASE}/api/files"
@@ -192,7 +192,7 @@ def download_rulebook_pdf(
         request = urllib.request.Request(download_url, headers=headers)
         with urllib.request.urlopen(request, timeout=90) as response:
             content_type = response.headers.get("Content-Type", "")
-            data = response.read()
+            data = read_bounded_http_body(response)
     except urllib.error.HTTPError as exc:
         raise BggDownloadError(
             "BoardGameGeek blocked automatic download. "

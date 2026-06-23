@@ -25,4 +25,4 @@ def test_rulebook_store_writes_index_atomically(tmp_path, monkeypatch):
     assert index_path.exists()
     payload = json.loads(index_path.read_text(encoding="utf-8"))
     assert payload[0]["name"] == "Game"
-    assert not (rulebooks_dir / "index.json.tmp").exists()
+    assert not list(rulebooks_dir.glob("index.*.tmp"))

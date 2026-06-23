@@ -52,11 +52,34 @@ async def read_bounded_pdf_upload(file, *, max_bytes: int | None = None) -> byte
     return content
 
 
+def read_bounded_http_body(
+    response,
+    *,
+    max_bytes: int | None = None,
+    chunk_size: int = _READ_CHUNK_SIZE,
+) -> bytes:
+    """Read an HTTP response body with a byte cap."""
+    limit = max_bytes if max_bytes is not None else MAX_PDF_BYTES
+    parts: list[bytes] = []
+    total = 0
+    while True:
+        chunk = response.read(chunk_size)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > limit:
+            mb = limit // (1024 * 1024)
+            raise ValueError(f"PDF is too large (max {mb} MB).")
+        parts.append(chunk)
+    return b"".join(parts)
+
+
 __all__ = [
     "MAX_PDF_BYTES",
     "PDF_MAGIC",
     "ensure_pdf_magic",
     "ensure_pdf_size",
+    "read_bounded_http_body",
     "read_bounded_pdf_upload",
     "safe_stored_filename",
 ]

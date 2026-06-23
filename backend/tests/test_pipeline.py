@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from agents.pipeline import RefereePipeline
+import pytest
+
+from agents.pipeline import RefereePipeline, _reindex_lock
 from services.conversation import retrieval_query
 from services.faq_cache import ask_lookup_key
 from services.vector_store import StoredChunk
@@ -182,7 +184,7 @@ def test_reindex_clears_faq_cache_and_replaces_chunks(sample_pdf, isolated_data)
             "rulebook_name": "Test Game",
             "question": "When can I trade?",
             "ruling": {"ruling": "Cached", "needs_clarification": False},
-            "retrieval": {"chunks_found": 0, "pages": [], "sources": []},
+            "retrieval": {"chunks_found": 2, "pages": [1], "sources": []},
             "citation_check": {"all_valid": True, "issues": [], "citations": []},
         },
         label="When can I trade?",
@@ -221,3 +223,22 @@ def test_pipeline_clear_faq_cache_forces_fresh_answer(
     third = pipeline.ask(book_id, "Can I attack on the first turn?")
     assert capturing.calls == 2
     assert not third.get("cached")
+
+
+def test_ask_while_reindexing_raises(sample_pdf, isolated_data):
+    pipeline = RefereePipeline()
+    upload = pipeline.upload_rulebook(
+        "Test Game",
+        "test.pdf",
+        sample_pdf.read_bytes(),
+        original_filename="sample-rulebook.pdf",
+    )
+    book_id = upload["rulebook"].id
+
+    lock = _reindex_lock(book_id)
+    assert lock.acquire(blocking=False)
+    try:
+        with pytest.raises(ValueError, match="re-indexed"):
+            pipeline.ask(book_id, "Can I attack on the first turn?")
+    finally:
+        lock.release()

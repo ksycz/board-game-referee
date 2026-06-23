@@ -26,6 +26,9 @@ def dispute_lookup_key(situation: str, player_a: str, player_b: str) -> str:
 
 
 def is_cacheable_response(response: dict[str, Any]) -> bool:
+    retrieval = response.get("retrieval") or {}
+    if retrieval.get("chunks_found") == 0:
+        return False
     ruling = response.get("ruling") or {}
     if ruling.get("needs_clarification"):
         return False

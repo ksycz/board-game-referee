@@ -112,5 +112,12 @@ def test_delete_rulebook_removes_cache_file(tmp_path):
 
 
 def test_is_cacheable_response_requires_final_ruling():
-    assert is_cacheable_response({"ruling": {"ruling": "Yes.", "needs_clarification": False}})
+    assert is_cacheable_response({
+        "ruling": {"ruling": "Yes.", "needs_clarification": False},
+        "retrieval": {"chunks_found": 2},
+    })
     assert not is_cacheable_response({"ruling": {"ruling": "", "needs_clarification": False}})
+    assert not is_cacheable_response({
+        "ruling": {"ruling": "No passages.", "needs_clarification": False},
+        "retrieval": {"chunks_found": 0},
+    })

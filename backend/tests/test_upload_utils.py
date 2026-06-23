@@ -9,9 +9,26 @@ from starlette.datastructures import UploadFile
 from services.upload_utils import (
     ensure_pdf_magic,
     ensure_pdf_size,
+    read_bounded_http_body,
     read_bounded_pdf_upload,
     safe_stored_filename,
 )
+
+
+class _FakeHttpBody:
+    def __init__(self, data: bytes, *, chunk_size: int = 256) -> None:
+        self._data = data
+        self._chunk_size = chunk_size
+        self._pos = 0
+
+    def read(self, size: int = -1) -> bytes:
+        if self._pos >= len(self._data):
+            return b""
+        if size < 0:
+            size = self._chunk_size
+        chunk = self._data[self._pos : self._pos + size]
+        self._pos += len(chunk)
+        return chunk
 
 
 def test_safe_stored_filename_strips_path_components():
@@ -45,4 +62,10 @@ def test_read_bounded_pdf_upload_rejects_oversized_stream():
     )
     with pytest.raises(ValueError, match="too large"):
         asyncio.run(read_bounded_pdf_upload(upload, max_bytes=1024))
+
+
+def test_read_bounded_http_body_rejects_oversized_stream():
+    body = _FakeHttpBody(b"%PDF-" + b"x" * 2048)
+    with pytest.raises(ValueError, match="too large"):
+        read_bounded_http_body(body, max_bytes=1024)
 

@@ -16,6 +16,26 @@ export async function fetchAppConfig(): Promise<AppConfig> {
   return res.json() as Promise<AppConfig>;
 }
 
+export async function fetchAppConfigWithRetry(
+  attempts = 3,
+  delayMs = 400,
+): Promise<AppConfig> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await fetchAppConfig();
+    } catch (err) {
+      lastError = err;
+      if (attempt < attempts - 1) {
+        await new Promise((resolve) => {
+          window.setTimeout(resolve, delayMs * (attempt + 1));
+        });
+      }
+    }
+  }
+  throw lastError;
+}
+
 export function apiAuthHeaders(
   extra?: Record<string, string>,
 ): Record<string, string> {

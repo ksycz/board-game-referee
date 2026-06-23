@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import App from "./App";
 import AccessGate from "./AccessGate";
-import { fetchAppConfig, type AppConfig } from "./api";
-import { getAccessKey, initAccessKeyFromUrl } from "./accessKey";
+import { fetchAppConfigWithRetry, validateAccessKey, type AppConfig } from "./api";
+import { clearAccessKey, getAccessKey, initAccessKeyFromUrl } from "./accessKey";
 
 function readInitialUnlockState(): boolean {
   if (typeof window === "undefined") {
@@ -12,19 +12,32 @@ function readInitialUnlockState(): boolean {
   return Boolean(getAccessKey());
 }
 
+function configFallback(): AppConfig {
+  if (import.meta.env.VITE_DEMO_MODE === "true") {
+    return {
+      auth_required: false,
+      demo_mode: true,
+      full_access: false,
+    };
+  }
+
+  const hasKey = Boolean(getAccessKey());
+  return {
+    auth_required: hasKey,
+    demo_mode: false,
+    full_access: false,
+  };
+}
+
 export default function AppRoot() {
   const [unlocked, setUnlocked] = useState(readInitialUnlockState);
   const [config, setConfig] = useState<AppConfig | null>(null);
 
   useEffect(() => {
-    fetchAppConfig()
+    fetchAppConfigWithRetry()
       .then(setConfig)
       .catch(() => {
-        setConfig({
-          auth_required: true,
-          demo_mode: false,
-          full_access: false,
-        });
+        setConfig(configFallback());
       });
   }, []);
 
@@ -32,10 +45,46 @@ export default function AppRoot() {
     if (!unlocked) {
       return;
     }
-    fetchAppConfig()
+    fetchAppConfigWithRetry()
       .then(setConfig)
       .catch(() => {});
   }, [unlocked]);
+
+  useEffect(() => {
+    if (!config?.auth_required || !unlocked) {
+      return;
+    }
+    const key = getAccessKey();
+    if (!key) {
+      return;
+    }
+
+    let cancelled = false;
+    validateAccessKey()
+      .then((valid) => {
+        if (cancelled || valid) {
+          return;
+        }
+        clearAccessKey();
+        setUnlocked(false);
+        setConfig((current) =>
+          current
+            ? { ...current, full_access: false }
+            : configFallback(),
+        );
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+        clearAccessKey();
+        setUnlocked(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [config?.auth_required, unlocked]);
 
   if (!config) {
     return (

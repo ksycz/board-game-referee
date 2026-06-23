@@ -38,9 +38,12 @@ def _mark_existing_as_demo(pipeline, book_id: str) -> str:
     book = pipeline.store.get(book_id)
     if book is None:
         raise KeyError(book_id)
-    if not book.demo:
-        book.demo = True
-        pipeline.store._save()
+    if book.demo:
+        return book.id
+    if not book.filename.startswith("demo_"):
+        raise ValueError("Refusing to mark a non-demo upload as public demo content.")
+    book.demo = True
+    pipeline.store._save()
     return book.id
 
 
@@ -70,8 +73,19 @@ def seed_demo_rulebook_if_needed(pipeline) -> str | None:
             demo=True,
         )
     except DuplicateRulebookError as exc:
-        logger.info("Recovering existing PDF as demo rulebook after duplicate upload")
-        return _mark_existing_as_demo(pipeline, exc.existing.id)
+        existing = exc.existing
+        if existing.demo:
+            logger.info("Using existing demo rulebook after duplicate upload")
+            return existing.id
+        if existing.filename.startswith("demo_"):
+            logger.info("Recovering interrupted demo seed upload")
+            return _mark_existing_as_demo(pipeline, existing.id)
+        logger.warning(
+            'Demo PDF already exists as private rulebook "%s" (%s); not exposing in demo',
+            existing.name,
+            existing.id,
+        )
+        return None
     except Exception:
         logger.exception("Failed to seed demo rulebook")
         return None
