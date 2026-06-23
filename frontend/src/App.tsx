@@ -28,7 +28,7 @@ import {
   lookupBggRulebooks,
   pinRulebook,
   submitRulingFeedback,
-  rulebookPagePreviewUrl,
+  fetchRulebookPagePreviewBlob,
   uploadProgressPercent,
   uploadRulebook,
   type UploadProgress,
@@ -1774,15 +1774,47 @@ function RulebookPagePreview({
   rulebookId: string;
   page: number;
 }) {
+  const [thumbUrl, setThumbUrl] = useState<string | null>(null);
+  const [largeUrl, setLargeUrl] = useState<string | null>(null);
   const [previewFailed, setPreviewFailed] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const thumbUrl = rulebookPagePreviewUrl(rulebookId, page, { zoom: 2 });
-  const largeUrl = rulebookPagePreviewUrl(rulebookId, page, { zoom: 3.5 });
 
   const closeLightbox = useCallback((event?: { stopPropagation?: () => void }) => {
     event?.stopPropagation?.();
     setExpanded(false);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const objectUrls: string[] = [];
+
+    async function loadPreviews() {
+      try {
+        const [thumb, large] = await Promise.all([
+          fetchRulebookPagePreviewBlob(rulebookId, page, { zoom: 2 }),
+          fetchRulebookPagePreviewBlob(rulebookId, page, { zoom: 3.5 }),
+        ]);
+        if (cancelled) {
+          URL.revokeObjectURL(thumb);
+          URL.revokeObjectURL(large);
+          return;
+        }
+        objectUrls.push(thumb, large);
+        setThumbUrl(thumb);
+        setLargeUrl(large);
+      } catch {
+        if (!cancelled) {
+          setPreviewFailed(true);
+        }
+      }
+    }
+
+    void loadPreviews();
+    return () => {
+      cancelled = true;
+      objectUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [rulebookId, page]);
 
   useEffect(() => {
     if (!expanded) {
@@ -1806,6 +1838,14 @@ function RulebookPagePreview({
     return (
       <figure className="source-panel-preview source-panel-preview-unavailable">
         <p className="source-panel-missing">Page preview unavailable for this passage.</p>
+      </figure>
+    );
+  }
+
+  if (!thumbUrl || !largeUrl) {
+    return (
+      <figure className="source-panel-preview source-panel-preview-unavailable">
+        <p className="source-panel-missing">Loading page preview…</p>
       </figure>
     );
   }
@@ -1852,7 +1892,6 @@ function RulebookPagePreview({
             src={thumbUrl}
             alt={`Rulebook page ${page}`}
             loading="lazy"
-            onError={() => setPreviewFailed(true)}
           />
           <span className="source-panel-preview-hint" aria-hidden="true">
             Tap to enlarge

@@ -132,6 +132,18 @@ Copy `backend/.env.example` to `backend/.env`. Key variables:
 | `OCR_LANGUAGE` | `eng` | Tesseract language code(s) |
 | `OCR_DPI` | `150` | Render resolution for full-page OCR |
 | `OCR_MIN_INDEXABLE_CHARS` | `80` | Try OCR when a page has fewer indexable characters |
+| `API_ACCESS_KEY` | — | When set, all `/api/*` routes (except `/api/health`) require `X-API-Key` or `Authorization: Bearer` |
+| `RATE_LIMIT_ENABLED` | on in production or when `API_ACCESS_KEY` is set | Per-IP rate limits on API routes (`0` to disable) |
+| `RATE_LIMIT_LLM_MAX` | `30` | Max ask/dispute requests per IP per window |
+| `RATE_LIMIT_LLM_WINDOW` | `3600` | LLM rate-limit window in seconds |
+| `RATE_LIMIT_EXPENSIVE_MAX` | `10` | Max upload/reindex/BGG requests per IP per window |
+| `RATE_LIMIT_EXPENSIVE_WINDOW` | `3600` | Expensive-operation window in seconds |
+| `RATE_LIMIT_PREVIEW_MAX` | `120` | Max page-preview requests per IP per window |
+| `RATE_LIMIT_PREVIEW_WINDOW` | `60` | Preview window in seconds |
+| `RATE_LIMIT_DEFAULT_MAX` | `300` | Max other API requests per IP per window |
+| `RATE_LIMIT_DEFAULT_WINDOW` | `60` | Default window in seconds |
+
+For public deploys, set `API_ACCESS_KEY` on the backend and `VITE_API_ACCESS_KEY` to the same value when building the frontend (Docker build arg or `frontend/.env.production`). The key is embedded in the static bundle — it keeps casual abuse out, not determined attackers.
 
 ## Testing
 
@@ -198,7 +210,8 @@ Repeat questions with no conversation history are answered from a per-rulebook c
 
 - Root: `backend/` or use the included **Docker** setup
 - Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-- Set `ANTHROPIC_API_KEY` and `CORS_ORIGINS` (your frontend URL)
+- Set `ANTHROPIC_API_KEY`, `CORS_ORIGINS` (your frontend URL), and `API_ACCESS_KEY` for public deploys
+- Build the frontend with the same key: `VITE_API_ACCESS_KEY=$API_ACCESS_KEY npm run build` (Docker: `--build-arg VITE_API_ACCESS_KEY=...`)
 - Attach a persistent volume at `DATA_DIR` so uploads, cache, and ChromaDB survive restarts
 
 **Frontend** (Vercel, Netlify, Cloudflare Pages):

@@ -44,6 +44,31 @@ OCR_MIN_INDEXABLE_CHARS = int(os.getenv("OCR_MIN_INDEXABLE_CHARS", "80"))
 _cors = os.getenv("CORS_ORIGINS", "http://localhost:5173")
 CORS_ORIGINS = [origin.strip() for origin in _cors.split(",") if origin.strip()]
 
+API_ACCESS_KEY = os.getenv("API_ACCESS_KEY", "").strip()
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _rate_limit_default_enabled() -> bool:
+    env = os.getenv("ENVIRONMENT", "").strip().lower()
+    return env in ("production", "prod") or bool(API_ACCESS_KEY)
+
+
+RATE_LIMIT_ENABLED = _env_bool("RATE_LIMIT_ENABLED", _rate_limit_default_enabled())
+RATE_LIMIT_LLM_MAX = int(os.getenv("RATE_LIMIT_LLM_MAX", "30"))
+RATE_LIMIT_LLM_WINDOW = float(os.getenv("RATE_LIMIT_LLM_WINDOW", "3600"))
+RATE_LIMIT_EXPENSIVE_MAX = int(os.getenv("RATE_LIMIT_EXPENSIVE_MAX", "10"))
+RATE_LIMIT_EXPENSIVE_WINDOW = float(os.getenv("RATE_LIMIT_EXPENSIVE_WINDOW", "3600"))
+RATE_LIMIT_PREVIEW_MAX = int(os.getenv("RATE_LIMIT_PREVIEW_MAX", "120"))
+RATE_LIMIT_PREVIEW_WINDOW = float(os.getenv("RATE_LIMIT_PREVIEW_WINDOW", "60"))
+RATE_LIMIT_DEFAULT_MAX = int(os.getenv("RATE_LIMIT_DEFAULT_MAX", "300"))
+RATE_LIMIT_DEFAULT_WINDOW = float(os.getenv("RATE_LIMIT_DEFAULT_WINDOW", "60"))
+
 
 def ensure_dirs() -> None:
     RULEBOOKS_DIR.mkdir(parents=True, exist_ok=True)

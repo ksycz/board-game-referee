@@ -18,6 +18,8 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr("services.vector_store.CHROMA_DIR", chroma_dir)
     monkeypatch.setattr("services.rulebook_store.RULEBOOKS_DIR", rulebooks_dir)
     monkeypatch.setattr("config.ANTHROPIC_API_KEY", "")
+    monkeypatch.setattr("config.API_ACCESS_KEY", "")
+    monkeypatch.setattr("config.RATE_LIMIT_ENABLED", False)
 
     import main
 

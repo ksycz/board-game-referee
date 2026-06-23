@@ -3,7 +3,9 @@ WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm install
 COPY frontend/ ./
+ARG VITE_API_ACCESS_KEY=
 ENV VITE_API_URL=
+ENV VITE_API_ACCESS_KEY=$VITE_API_ACCESS_KEY
 RUN npm run build
 
 FROM python:3.12-slim

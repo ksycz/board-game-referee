@@ -1,4 +1,15 @@
 const API = import.meta.env.VITE_API_URL ?? "";
+const API_ACCESS_KEY = import.meta.env.VITE_API_ACCESS_KEY ?? "";
+
+export function apiAuthHeaders(
+  extra?: Record<string, string>,
+): Record<string, string> {
+  const headers: Record<string, string> = { ...(extra ?? {}) };
+  if (API_ACCESS_KEY) {
+    headers["X-API-Key"] = API_ACCESS_KEY;
+  }
+  return headers;
+}
 
 function parseErrorDetail(detail: unknown): string | undefined {
   if (typeof detail === "string") return detail;
@@ -474,7 +485,7 @@ export function formatFileSize(bytes: number): string {
 export async function lookupBggRulebooks(url: string): Promise<BggLookupResponse> {
   const res = await fetch(`${API}/api/rulebooks/bgg/lookup`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: apiAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ url }),
   });
   if (!res.ok) {
@@ -490,7 +501,7 @@ export async function uploadBggRulebook(
 ): Promise<UploadResponse> {
   const res = await fetch(`${API}/api/rulebooks/bgg/upload-stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: apiAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({
       file_id: file.file_id,
       filename: file.filename,
@@ -526,7 +537,7 @@ export async function uploadBggRulebook(
 }
 
 export async function listRulebooks(): Promise<Rulebook[]> {
-  const res = await fetch(`${API}/api/rulebooks`);
+  const res = await fetch(`${API}/api/rulebooks`, { headers: apiAuthHeaders() });
   if (!res.ok) throw new Error("Failed to load rulebooks");
   return res.json();
 }
@@ -540,7 +551,11 @@ export async function uploadRulebook(
   form.append("file", file);
   if (name) form.append("name", name);
 
-  const res = await fetch(`${API}/api/rulebooks/upload-stream`, { method: "POST", body: form });
+  const res = await fetch(`${API}/api/rulebooks/upload-stream`, {
+    method: "POST",
+    headers: apiAuthHeaders(),
+    body: form,
+  });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(parseErrorDetail(data.detail) ?? "Upload failed");
@@ -567,7 +582,9 @@ export async function uploadRulebook(
 }
 
 export async function fetchExampleQuestions(rulebookId: string): Promise<string[]> {
-  const res = await fetch(`${API}/api/rulebooks/${rulebookId}/examples`);
+  const res = await fetch(`${API}/api/rulebooks/${rulebookId}/examples`, {
+    headers: apiAuthHeaders(),
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(parseErrorDetail(err.detail) ?? "Failed to load example questions");
@@ -583,7 +600,7 @@ export async function searchRulebook(
 ): Promise<SearchResponse> {
   const res = await fetch(`${API}/api/rulebooks/${rulebookId}/search`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: apiAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ query, limit }),
   });
   if (!res.ok) {
@@ -599,7 +616,7 @@ export async function askRulebook(
 ): Promise<AskResponse> {
   const res = await fetch(`${API}/api/rulebooks/${rulebookId}/ask`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: apiAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ question, history }),
   });
   if (!res.ok) {
@@ -617,7 +634,7 @@ export async function disputeRulebook(
 ): Promise<AskResponse> {
   const res = await fetch(`${API}/api/rulebooks/${rulebookId}/dispute`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: apiAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({
       situation,
       player_a: playerA,
@@ -632,7 +649,10 @@ export async function disputeRulebook(
 }
 
 export async function deleteRulebook(rulebookId: string): Promise<void> {
-  const res = await fetch(`${API}/api/rulebooks/${rulebookId}`, { method: "DELETE" });
+  const res = await fetch(`${API}/api/rulebooks/${rulebookId}`, {
+    method: "DELETE",
+    headers: apiAuthHeaders(),
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(parseErrorDetail(err.detail) ?? "Delete failed");
@@ -642,7 +662,7 @@ export async function deleteRulebook(rulebookId: string): Promise<void> {
 export async function pinRulebook(rulebookId: string, pinned: boolean): Promise<Rulebook> {
   const res = await fetch(`${API}/api/rulebooks/${rulebookId}/pin`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: apiAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ pinned }),
   });
   if (!res.ok) {
@@ -664,9 +684,24 @@ export function rulebookPagePreviewUrl(
   return path;
 }
 
+export async function fetchRulebookPagePreviewBlob(
+  rulebookId: string,
+  page: number,
+  options?: { zoom?: number },
+): Promise<string> {
+  const url = rulebookPagePreviewUrl(rulebookId, page, options);
+  const res = await fetch(url, { headers: apiAuthHeaders() });
+  if (!res.ok) {
+    await throwIfNotOk(res, "Page preview unavailable");
+  }
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
 export async function clearFaqCache(rulebookId: string): Promise<number> {
   const res = await fetch(`${API}/api/rulebooks/${rulebookId}/faq-cache`, {
     method: "DELETE",
+    headers: apiAuthHeaders(),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -682,6 +717,7 @@ export async function reindexRulebook(
 ): Promise<UploadResponse> {
   const res = await fetch(`${API}/api/rulebooks/${rulebookId}/reindex-stream`, {
     method: "POST",
+    headers: apiAuthHeaders(),
   });
   if (!res.ok) {
     await throwIfNotOk(res, "Could not re-scan this rulebook");
@@ -716,7 +752,7 @@ export async function submitRulingFeedback(
 ): Promise<void> {
   const res = await fetch(`${API}/api/rulebooks/${rulebookId}/feedback`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: apiAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(payload),
   });
   if (!res.ok) {

@@ -7,9 +7,9 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -25,6 +25,8 @@ from services.rulebook_store import DuplicateRulebookError
 from services.reindex_stream import stream_rulebook_reindex
 from services.upload_stream import stream_rulebook_upload
 from services.upload_utils import read_bounded_pdf_upload, safe_stored_filename
+from services.api_auth import AUTH_EXEMPT_PATHS, auth_enabled, verify_api_key
+from services.rate_limit import check_rate_limit, rate_limit_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +68,32 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def enforce_api_security(request: Request, call_next):
+    path = request.url.path
+    if path.startswith("/api/"):
+        if auth_enabled() and path not in AUTH_EXEMPT_PATHS and not verify_api_key(request):
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Invalid or missing API key."},
+            )
+        if rate_limit_enabled():
+            allowed, retry_after = check_rate_limit(request)
+            if not allowed:
+                headers = {"Retry-After": str(retry_after)} if retry_after else {}
+                return JSONResponse(
+                    status_code=429,
+                    content={
+                        "detail": {
+                            "code": "rate_limit",
+                            "message": "Too many requests. Please wait and try again.",
+                        },
+                    },
+                    headers=headers,
+                )
+    return await call_next(request)
 
 
 class HistoryMessage(BaseModel):
