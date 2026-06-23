@@ -4,12 +4,23 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from collections.abc import AsyncIterator
 from dataclasses import asdict
 from typing import Any
 
 from agents.pipeline import RefereePipeline
 from services.rulebook_store import DuplicateRulebookError
+
+logger = logging.getLogger(__name__)
+
+GENERIC_STREAM_ERROR = "Something went wrong. Please try again."
+
+
+def stream_error_message(exc: Exception) -> str:
+    if isinstance(exc, (DuplicateRulebookError, KeyError, FileNotFoundError, ValueError)):
+        return str(exc)
+    return GENERIC_STREAM_ERROR
 
 
 def _sse(event: str, payload: dict[str, Any]) -> str:
@@ -65,7 +76,8 @@ async def stream_rulebook_upload(
                 }
             )
         except Exception as exc:
-            await progress_queue.put({"type": "error", "message": str(exc)})
+            logger.exception("Rulebook upload failed")
+            await progress_queue.put({"type": "error", "message": stream_error_message(exc)})
         finally:
             await progress_queue.put(None)
 

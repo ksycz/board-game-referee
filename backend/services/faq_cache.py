@@ -69,10 +69,13 @@ class FaqCache:
         book = self._books.get(rulebook_id)
         if book is None:
             return
-        self._path(rulebook_id).write_text(
+        path = self._path(rulebook_id)
+        temp_path = path.with_suffix(".json.tmp")
+        temp_path.write_text(
             json.dumps(book, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
+        temp_path.replace(path)
 
     def get(self, rulebook_id: str, lookup_key: str) -> dict[str, Any] | None:
         if not self.enabled:

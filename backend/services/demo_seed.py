@@ -7,6 +7,7 @@ import uuid
 from pathlib import Path
 
 import config
+from services.rulebook_store import DuplicateRulebookError
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,16 @@ def _existing_demo_rulebook_id(pipeline) -> str | None:
     return None
 
 
+def _mark_existing_as_demo(pipeline, book_id: str) -> str:
+    book = pipeline.store.get(book_id)
+    if book is None:
+        raise KeyError(book_id)
+    if not book.demo:
+        book.demo = True
+        pipeline.store._save()
+    return book.id
+
+
 def seed_demo_rulebook_if_needed(pipeline) -> str | None:
     """Ingest the bundled demo PDF when pre-seeding is enabled."""
     if not config.PRESEED_DEMO_RULEBOOK:
@@ -56,13 +67,15 @@ def seed_demo_rulebook_if_needed(pipeline) -> str | None:
             stored_name,
             pdf_bytes,
             original_filename=DEMO_SOURCE_FILENAME,
+            demo=True,
         )
+    except DuplicateRulebookError as exc:
+        logger.info("Recovering existing PDF as demo rulebook after duplicate upload")
+        return _mark_existing_as_demo(pipeline, exc.existing.id)
     except Exception:
         logger.exception("Failed to seed demo rulebook")
         return None
 
     book = result["rulebook"]
-    book.demo = True
-    pipeline.store._save()
     logger.info('Seeded demo rulebook "%s" (%s)', book.name, book.id)
     return book.id

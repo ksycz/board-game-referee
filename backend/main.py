@@ -309,11 +309,6 @@ def _data_dir_writable() -> bool:
         return False
 
 
-@app.get("/api/rulebooks")
-def list_rulebooks():
-    return [asdict(book) for book in pipeline.store.list()]
-
-
 @app.post("/api/rulebooks")
 async def upload_rulebook(
     request: Request,
@@ -364,7 +359,11 @@ def rulebook_examples(request: Request, rulebook_id: str):
 @app.delete("/api/rulebooks/{rulebook_id}")
 def delete_rulebook(request: Request, rulebook_id: str):
     require_full_access(request)
-    if not pipeline.delete_rulebook(rulebook_id):
+    try:
+        deleted = pipeline.delete_rulebook(rulebook_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not deleted:
         raise HTTPException(status_code=404, detail="Rulebook not found")
     return {"deleted": rulebook_id}
 

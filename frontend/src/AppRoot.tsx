@@ -21,9 +21,9 @@ export default function AppRoot() {
       .then(setConfig)
       .catch(() => {
         setConfig({
-          auth_required: false,
+          auth_required: true,
           demo_mode: false,
-          full_access: true,
+          full_access: false,
         });
       });
   }, []);

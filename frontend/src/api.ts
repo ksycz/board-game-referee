@@ -48,7 +48,7 @@ function parseErrorDetail(detail: unknown): string | undefined {
   return undefined;
 }
 
-export type ApiErrorCode = "rate_limit";
+export type ApiErrorCode = "rate_limit" | "unauthorized" | "demo_readonly" | "demo_rulebook_only";
 
 export class ApiError extends Error {
   readonly code: ApiErrorCode | "unknown";
@@ -69,21 +69,22 @@ export function isRateLimitError(err: unknown): err is ApiError {
 function parseApiError(status: number, body: Record<string, unknown>): ApiError {
   const detail = body.detail ?? body;
   const message = parseErrorDetail(detail) ?? "Request failed";
+  const detailCode =
+    typeof detail === "object" && detail && "code" in detail
+      ? String((detail as { code?: string }).code ?? "")
+      : "";
 
-  if (status === 429) {
+  if (status === 429 || detailCode === "rate_limit" || /rate limit/i.test(message)) {
     return new ApiError(message, "rate_limit", status);
   }
-
-  if (
-    typeof detail === "object"
-    && detail
-    && (detail as { code?: string }).code === "rate_limit"
-  ) {
-    return new ApiError(message, "rate_limit", status);
+  if (status === 401 || detailCode === "unauthorized") {
+    return new ApiError(message, "unauthorized", status);
   }
-
-  if (/rate limit/i.test(message)) {
-    return new ApiError(message, "rate_limit", status);
+  if (detailCode === "demo_readonly") {
+    return new ApiError(message, "demo_readonly", status);
+  }
+  if (detailCode === "demo_rulebook_only") {
+    return new ApiError(message, "demo_rulebook_only", status);
   }
 
   return new ApiError(message, "unknown", status);
@@ -554,8 +555,13 @@ export async function uploadBggRulebook(
 
 export async function listRulebooks(): Promise<Rulebook[]> {
   const res = await fetch(`${API}/api/rulebooks`, { headers: apiAuthHeaders() });
-  if (!res.ok) throw new Error("Failed to load rulebooks");
+  await throwIfNotOk(res, "Failed to load rulebooks");
   return res.json();
+}
+
+export async function validateAccessKey(): Promise<boolean> {
+  const res = await fetch(`${API}/api/rulebooks`, { headers: apiAuthHeaders() });
+  return res.ok;
 }
 
 export async function uploadRulebook(
@@ -574,7 +580,7 @@ export async function uploadRulebook(
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(parseErrorDetail(data.detail) ?? "Upload failed");
+    throw parseApiError(res.status, data as Record<string, unknown>);
   }
   if (!res.body) {
     throw new Error("Upload failed — no response from server.");

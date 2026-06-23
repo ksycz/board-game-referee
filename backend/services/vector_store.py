@@ -211,11 +211,6 @@ class VectorStore:
         if not chunks:
             return self._collection(rulebook_id).count()
 
-        collection = self._collection(rulebook_id)
-        if collection.count() > 0:
-            self.delete_rulebook(rulebook_id)
-
-        collection = self._collection(rulebook_id)
         ids: list[str] = []
         documents: list[str] = []
         metadatas: list[dict] = []
@@ -231,7 +226,25 @@ class VectorStore:
                 }
             )
 
-        collection.add(ids=ids, documents=documents, metadatas=metadatas)
+        collection = self._collection(rulebook_id)
+        backup: dict | None = None
+        if collection.count() > 0:
+            backup = collection.get(include=["documents", "metadatas"])
+            self.delete_rulebook(rulebook_id)
+
+        collection = self._collection(rulebook_id)
+        try:
+            collection.add(ids=ids, documents=documents, metadatas=metadatas)
+        except Exception:
+            self.delete_rulebook(rulebook_id)
+            if backup and backup.get("ids"):
+                restored = self._collection(rulebook_id)
+                restored.add(
+                    ids=backup["ids"],
+                    documents=backup["documents"],
+                    metadatas=backup["metadatas"],
+                )
+            raise
         return len(ids)
 
     def search(self, rulebook_id: str, query: str, top_k: int) -> list[StoredChunk]:

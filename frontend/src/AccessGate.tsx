@@ -1,5 +1,6 @@
 import { FormEvent, useState } from "react";
-import { setAccessKey } from "./accessKey";
+import { validateAccessKey } from "./api";
+import { clearAccessKey, setAccessKey } from "./accessKey";
 
 type AccessGateProps = {
   onUnlock: () => void;
@@ -8,17 +9,34 @@ type AccessGateProps = {
 export default function AccessGate({ onUnlock }: AccessGateProps) {
   const [key, setKey] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  function handleSubmit(event: FormEvent) {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     const trimmed = key.trim();
     if (!trimmed) {
       setError("Enter the access code from your invite link.");
       return;
     }
-    setAccessKey(trimmed);
+
+    setSubmitting(true);
     setError(null);
-    onUnlock();
+    setAccessKey(trimmed);
+
+    try {
+      const valid = await validateAccessKey();
+      if (!valid) {
+        clearAccessKey();
+        setError("That access code didn't work. Check your invite link.");
+        return;
+      }
+      onUnlock();
+    } catch {
+      clearAccessKey();
+      setError("Could not verify the access code. Try again in a moment.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -38,13 +56,16 @@ export default function AccessGate({ onUnlock }: AccessGateProps) {
             value={key}
             onChange={(event) => setKey(event.target.value)}
             placeholder="Paste access code"
+            disabled={submitting}
           />
           {error && (
             <p className="access-gate-error" role="alert">
               {error}
             </p>
           )}
-          <button type="submit">Continue</button>
+          <button type="submit" disabled={submitting}>
+            {submitting ? "Checking…" : "Continue"}
+          </button>
         </form>
       </div>
     </div>

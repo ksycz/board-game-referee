@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import AsyncIterator
 from dataclasses import asdict
 from typing import Any
 
 from agents.pipeline import RefereePipeline
-from services.upload_stream import _sse
+from services.upload_stream import _sse, stream_error_message
+
+logger = logging.getLogger(__name__)
 
 
 async def stream_rulebook_reindex(
@@ -49,7 +52,8 @@ async def stream_rulebook_reindex(
                 {"type": "error", "message": str(exc), "code": "not_found"},
             )
         except Exception as exc:
-            await progress_queue.put({"type": "error", "message": str(exc)})
+            logger.exception("Rulebook re-index failed")
+            await progress_queue.put({"type": "error", "message": stream_error_message(exc)})
         finally:
             await progress_queue.put(None)
 

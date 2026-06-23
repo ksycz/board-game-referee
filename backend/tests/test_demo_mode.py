@@ -149,6 +149,15 @@ def test_demo_blocks_ask_on_private_book(tmp_path, monkeypatch, sample_pdf):
     assert res.json()["detail"]["code"] == "demo_rulebook_only"
 
 
+def test_demo_returns_404_for_unknown_rulebook(tmp_path, monkeypatch):
+    client = _demo_client(tmp_path, monkeypatch)
+    res = client.post(
+        "/api/rulebooks/missing-rulebook-id/ask",
+        json={"question": "Can I attack on the first turn?"},
+    )
+    assert res.status_code == 404
+
+
 def test_api_key_grants_full_access_in_demo_mode(tmp_path, monkeypatch, sample_pdf):
     client = _demo_client(tmp_path, monkeypatch, api_key="household-secret")
     with sample_pdf.open("rb") as f:

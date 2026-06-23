@@ -11,7 +11,7 @@ from typing import Any
 from agents.pipeline import RefereePipeline
 from services.bgg_fetch import BggDownloadError, BggError, download_rulebook_pdf
 from services.rulebook_store import DuplicateRulebookError
-from services.upload_stream import _sse
+from services.upload_stream import _sse, stream_error_message
 from services.upload_utils import safe_stored_filename
 
 
@@ -91,7 +91,7 @@ async def stream_bgg_rulebook_upload(
                 },
             )
         except Exception as exc:
-            await progress_queue.put({"type": "error", "message": str(exc)})
+            await progress_queue.put({"type": "error", "message": stream_error_message(exc)})
         finally:
             await progress_queue.put(None)
 

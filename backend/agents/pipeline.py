@@ -129,6 +129,7 @@ class RefereePipeline:
         *,
         original_filename: str,
         on_progress: Callable[[dict], None] | None = None,
+        demo: bool = False,
     ) -> dict:
         content_hash = pdf_content_hash(pdf_bytes)
         existing = self.store.find_by_content_hash(content_hash)
@@ -140,12 +141,12 @@ class RefereePipeline:
             filename=filename,
             page_count=0,
             content_hash=content_hash,
+            demo=demo,
         )
         pdf_path = self.store.pdf_path(book.id)
-        pdf_path.write_bytes(pdf_bytes)
-
-        book.name = derive_game_name(pdf_path, original_filename, name)
         try:
+            pdf_path.write_bytes(pdf_bytes)
+            book.name = derive_game_name(pdf_path, original_filename, name)
             ingest_result = self.ingestion.ingest(
                 book.id,
                 pdf_path,
@@ -286,11 +287,17 @@ class RefereePipeline:
         log_ruling_feedback({"rulebook_id": rulebook_id, **payload})
 
     def delete_rulebook(self, rulebook_id: str) -> bool:
-        if not self.store.delete(rulebook_id):
-            return False
-        self.vector_store.delete_rulebook(rulebook_id)
-        self.faq_cache.delete_rulebook(rulebook_id)
-        return True
+        lock = _reindex_lock(rulebook_id)
+        if not lock.acquire(blocking=False):
+            raise ValueError("This rulebook is being re-indexed. Try again in a moment.")
+        try:
+            if not self.store.delete(rulebook_id):
+                return False
+            self.vector_store.delete_rulebook(rulebook_id)
+            self.faq_cache.delete_rulebook(rulebook_id)
+            return True
+        finally:
+            lock.release()
 
     def set_rulebook_pinned(self, rulebook_id: str, pinned: bool) -> Rulebook | None:
         return self.store.set_pinned(rulebook_id, pinned)
@@ -345,7 +352,6 @@ class RefereePipeline:
             raise ValueError("This rulebook is already being re-indexed. Please wait.")
 
         try:
-            faq_cache_cleared = self.faq_cache.clear_rulebook(rulebook_id)
             ingest_result = self.ingestion.ingest(
                 rulebook_id,
                 pdf_path,
@@ -353,6 +359,7 @@ class RefereePipeline:
             )
             book.page_count = ingest_result["pages_extracted"]
             self.store._save()
+            faq_cache_cleared = self.faq_cache.clear_rulebook(rulebook_id)
 
             return {
                 "rulebook": book,

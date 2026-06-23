@@ -79,19 +79,32 @@ type ClarificationContext = {
 
 type AppError = {
   message: string;
-  code?: "rate_limit" | "bgg_manual_download";
+  code?: "rate_limit" | "bgg_manual_download" | "demo_readonly" | "demo_rulebook_only" | "unauthorized";
   bggUrl?: string;
 };
 
 function toAppError(err: unknown): AppError {
-  if (err instanceof ApiError && err.code === "rate_limit") {
-    return { message: err.message, code: "rate_limit" };
+  if (err instanceof ApiError) {
+    if (err.code === "rate_limit") {
+      return { message: err.message, code: "rate_limit" };
+    }
+    if (err.code === "demo_readonly" || err.code === "demo_rulebook_only") {
+      return { message: err.message, code: err.code };
+    }
+    if (err.code === "unauthorized") {
+      return { message: err.message, code: "unauthorized" };
+    }
   }
   return { message: err instanceof Error ? err.message : String(err) };
 }
 
 function buildHistory(messages: Message[]): HistoryMessage[] {
-  return messages.map((msg) => {
+  let end = messages.length;
+  while (end > 0 && messages[end - 1].role !== "referee") {
+    end -= 1;
+  }
+
+  return messages.slice(0, end).map((msg) => {
     if (msg.role === "user") {
       return { role: "user", content: msg.text };
     }
@@ -103,6 +116,16 @@ function buildHistory(messages: Message[]): HistoryMessage[] {
     }
     return { role: "assistant", content: msg.data.ruling.ruling };
   });
+}
+
+function messageDomKey(msg: Message, index: number): string {
+  if (msg.role === "user") {
+    return `user-${index}-${msg.text}`;
+  }
+  if (msg.role === "dispute") {
+    return `dispute-${index}-${msg.situation}`;
+  }
+  return `referee-${index}-${msg.data.ruling.ruling}`;
 }
 
 const SIDEBAR_LIST_PREVIEW_LIMIT = 5;
@@ -257,6 +280,9 @@ export default function App({
   const [showAllRecentExchanges, setShowAllRecentExchanges] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => loadSidebarCollapsed());
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== "undefined" && window.matchMedia(DESKTOP_LAYOUT_QUERY).matches,
+  );
   const [overlayDismissTick, setOverlayDismissTick] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const quickSearchInputRef = useRef<HTMLInputElement>(null);
@@ -264,6 +290,9 @@ export default function App({
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const loadingRef = useRef(false);
   const activeRequestRulebookRef = useRef<string | null>(null);
+  const quickSearchSeqRef = useRef(0);
+
+  const effectiveSidebarCollapsed = isDesktop && sidebarCollapsed;
 
   function selectRulebook(id: string) {
     if (loadingRef.current || id === selectedId) {
@@ -274,7 +303,11 @@ export default function App({
     }
     setSelectedId(id);
     setLibraryOpen(false);
-    clearConversation(id);
+    setQuestion("");
+    setDisputeSituation("");
+    setDisputePlayerA("");
+    setDisputePlayerB("");
+    setError(null);
   }
 
   const showLibraryPanel = useCallback(() => {
@@ -283,8 +316,10 @@ export default function App({
   }, []);
 
   const hideLibraryPanel = useCallback(() => {
-    setSidebarCollapsed(true);
-    saveSidebarCollapsed(true);
+    if (window.matchMedia(DESKTOP_LAYOUT_QUERY).matches) {
+      setSidebarCollapsed(true);
+      saveSidebarCollapsed(true);
+    }
     setLibraryOpen(false);
   }, []);
 
@@ -346,6 +381,13 @@ export default function App({
   }, []);
 
   useEffect(() => {
+    const mediaQuery = window.matchMedia(DESKTOP_LAYOUT_QUERY);
+    const onChange = () => setIsDesktop(mediaQuery.matches);
+    mediaQuery.addEventListener("change", onChange);
+    return () => mediaQuery.removeEventListener("change", onChange);
+  }, []);
+
+  useEffect(() => {
     refresh()
       .then((books) => {
         setSelectedId((current) => current ?? books[0]?.id ?? null);
@@ -383,6 +425,7 @@ export default function App({
   }, [clarification]);
 
   useEffect(() => {
+    quickSearchSeqRef.current += 1;
     setQuickSearchQuery("");
     setQuickSearchHits(null);
     setQuickSearchLoading(false);
@@ -436,8 +479,8 @@ export default function App({
             setInfo(null);
             handled = true;
           } else if (
-            !sidebarCollapsed
-            && window.matchMedia(DESKTOP_LAYOUT_QUERY).matches
+            !effectiveSidebarCollapsed
+            && isDesktop
           ) {
             hideLibraryPanel();
             handled = true;
@@ -483,13 +526,14 @@ export default function App({
     clarification,
     clearConversation,
     error,
+    effectiveSidebarCollapsed,
     hideLibraryPanel,
     info,
+    isDesktop,
     libraryOpen,
     loading,
     selectedId,
     setClarificationFor,
-    sidebarCollapsed,
   ]);
 
   useEffect(() => {
@@ -850,17 +894,27 @@ export default function App({
     if (!selectedId || !quickSearchQuery.trim()) {
       return;
     }
+    const searchForId = selectedId;
+    const seq = ++quickSearchSeqRef.current;
     setQuickSearchLoading(true);
     setQuickSearchSelected(null);
     setError(null);
     try {
-      const result = await searchRulebook(selectedId, quickSearchQuery.trim());
+      const result = await searchRulebook(searchForId, quickSearchQuery.trim());
+      if (seq !== quickSearchSeqRef.current || searchForId !== selectedId) {
+        return;
+      }
       setQuickSearchHits(result.hits);
     } catch (err) {
+      if (seq !== quickSearchSeqRef.current) {
+        return;
+      }
       setQuickSearchHits(null);
       setError(toAppError(err));
     } finally {
-      setQuickSearchLoading(false);
+      if (seq === quickSearchSeqRef.current) {
+        setQuickSearchLoading(false);
+      }
     }
   }
 
@@ -1007,7 +1061,7 @@ export default function App({
         </div>
       )}
 
-      <div className={`layout${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
+      <div className={`layout${effectiveSidebarCollapsed ? " sidebar-collapsed" : ""}`}>
         {libraryOpen && (
           <button
             type="button"
@@ -1017,7 +1071,7 @@ export default function App({
           />
         )}
 
-        {sidebarCollapsed ? (
+        {effectiveSidebarCollapsed ? (
           <aside className="sidebar panel sidebar-rail" aria-label="Library">
             <div className="sidebar-desktop-header sidebar-rail-header">
               <button
@@ -1358,7 +1412,10 @@ export default function App({
                   type="button"
                   className="library-toggle"
                   aria-expanded={libraryOpen}
-                  onClick={() => setLibraryOpen(true)}
+                  onClick={() => {
+                    showLibraryPanel();
+                    setLibraryOpen(true);
+                  }}
                 >
                   <IconMenu className="icon icon-sm" />
                   Games
@@ -1415,6 +1472,7 @@ export default function App({
                       <button
                         type="button"
                         className="new-conversation"
+                        disabled={loading}
                         onClick={() => clearConversation(selected.id)}
                       >
                         New conversation
@@ -1501,12 +1559,12 @@ export default function App({
                 )}
                 {messages.map((msg, i) =>
                   msg.role === "user" ? (
-                    <div key={i} id={`message-${i}`} className="message-wrap user">
+                    <div key={messageDomKey(msg, i)} id={`message-${i}`} className="message-wrap user">
                       <span className="message-label">You</span>
                       <div className="bubble user">{msg.text}</div>
                     </div>
                   ) : msg.role === "dispute" ? (
-                    <div key={i} id={`message-${i}`} className="message-wrap dispute">
+                    <div key={messageDomKey(msg, i)} id={`message-${i}`} className="message-wrap dispute">
                       <span className="message-label">Dispute</span>
                       <div className="bubble dispute">
                         <p className="dispute-field">
@@ -1524,7 +1582,7 @@ export default function App({
                       </div>
                     </div>
                   ) : (
-                    <div key={i} id={`message-${i}`} className="message-wrap referee">
+                    <div key={messageDomKey(msg, i)} id={`message-${i}`} className="message-wrap referee">
                       <span className="message-label">Referee</span>
                       <RefereeAnswer
                         rulebookId={selected.id}
