@@ -15,6 +15,15 @@ def auth_enabled() -> bool:
     return bool(config.API_ACCESS_KEY)
 
 
+def api_key_required(request: Request) -> bool:
+    """Whether this request must present a valid API key before routing."""
+    if not auth_enabled():
+        return False
+    if config.DEMO_MODE:
+        return False
+    return True
+
+
 def extract_api_key(request: Request) -> str | None:
     header = request.headers.get("X-API-Key")
     if header:

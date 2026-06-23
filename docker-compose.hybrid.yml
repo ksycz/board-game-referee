@@ -1,0 +1,16 @@
+# Local hybrid deploy — docker compose -f docker-compose.hybrid.yml --env-file deploy/hybrid.env up --build
+services:
+  app:
+    build:
+      context: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - deploy/hybrid.env
+    environment:
+      CORS_ORIGINS: http://localhost:8000
+    volumes:
+      - referee-data:/data
+
+volumes:
+  referee-data:

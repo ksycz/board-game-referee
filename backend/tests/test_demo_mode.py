@@ -161,3 +161,16 @@ def test_api_key_grants_full_access_in_demo_mode(tmp_path, monkeypatch, sample_p
 
     config_res = client.get("/api/config", headers={"X-API-Key": "household-secret"})
     assert config_res.json()["full_access"] is True
+
+
+def test_hybrid_allows_anonymous_demo_without_api_key(tmp_path, monkeypatch):
+    client = _demo_client(tmp_path, monkeypatch, api_key="household-secret")
+    res = client.get("/api/config")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["demo_mode"] is True
+    assert body["auth_required"] is False
+    assert body["full_access"] is False
+
+    list_res = client.get("/api/rulebooks")
+    assert list_res.status_code == 200

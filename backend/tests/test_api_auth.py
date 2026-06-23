@@ -15,6 +15,7 @@ def _client_with_auth(tmp_path, monkeypatch, *, api_key: str = "test-secret") ->
     monkeypatch.setattr("config.CHROMA_DIR", chroma_dir)
     monkeypatch.setattr("config.ANTHROPIC_API_KEY", "")
     monkeypatch.setattr("config.API_ACCESS_KEY", api_key)
+    monkeypatch.setattr("config.DEMO_MODE", False)
     monkeypatch.setattr("config.RATE_LIMIT_ENABLED", False)
     monkeypatch.setattr("services.vector_store.CHROMA_DIR", chroma_dir)
     monkeypatch.setattr("services.rulebook_store.RULEBOOKS_DIR", rulebooks_dir)

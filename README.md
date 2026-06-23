@@ -145,7 +145,7 @@ Copy `backend/.env.example` to `backend/.env`. Key variables:
 | `RATE_LIMIT_DEFAULT_MAX` | `300` | Max other API requests per IP per window |
 | `RATE_LIMIT_DEFAULT_WINDOW` | `60` | Default window in seconds |
 
-For public deploys, set `API_ACCESS_KEY` on the backend. Share invite links with `?access=YOUR_SECRET`, or set `VITE_API_ACCESS_KEY` at frontend build time so the key is embedded in the bundle.
+For public deploys, set `API_ACCESS_KEY` and `DEMO_MODE=1` on the same instance. Share family links with `?access=YOUR_SECRET`; keep the plain URL in the README for recruiters. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Testing
 
@@ -208,40 +208,25 @@ Repeat questions with no conversation history are answered from a per-rulebook c
 
 ## Deploy
 
-**Two-instance setup (recommended):** a **public demo** for your portfolio and a **private instance** for full personal use. Full step-by-step guide:
+**Recommended:** one cloud deploy with a **persistent disk** — public demo for recruiters + full access for you and family via `?access=SECRET`, works across devices.
 
-→ **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**
+→ **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** (step-by-step Fly.io / Render)
 
-Quick reference:
+| Link | Who | What |
+|------|-----|------|
+| `https://your-app.example.com` | Recruiters (README) | Sample game, ask / search / dispute |
+| `https://your-app.example.com/?access=SECRET` | You, family (bookmark, not in README) | Upload rulebooks, shared library on all devices |
 
-| Instance | `DEMO_MODE` | `API_ACCESS_KEY` | Share via |
-|----------|-------------|------------------|-----------|
-| Portfolio demo | `1` | unset | README link |
-| Personal (you + husband) | `0` | secret | `?access=SECRET` invite link (not in README) |
-
-Templates: [`deploy/demo.env.example`](deploy/demo.env.example), [`deploy/personal.env.example`](deploy/personal.env.example)  
-Render blueprints: [`render.demo.yaml`](render.demo.yaml), [`render.personal.yaml`](render.personal.yaml)
-
-### Local Docker
+Template: [`deploy/hybrid.env.example`](deploy/hybrid.env.example) · Blueprint: [`render.yaml`](render.yaml)
 
 ```bash
-# Public demo (sample game pre-loaded)
-cp deploy/demo.env.example deploy/demo.env   # set ANTHROPIC_API_KEY
-docker compose -f docker-compose.demo.yml --env-file deploy/demo.env up --build
-
-# Private full app
-cp deploy/personal.env.example deploy/personal.env
-docker compose -f docker-compose.personal.yml --env-file deploy/personal.env up --build
-# open http://localhost:8000/?access=YOUR_API_ACCESS_KEY
+cp deploy/hybrid.env.example deploy/hybrid.env   # set keys
+docker compose -f docker-compose.hybrid.yml --env-file deploy/hybrid.env up --build
 ```
 
-### Legacy single compose
+**Local dev** (no cloud): `./scripts/dev.sh` — data in `backend/data/`.
 
-```bash
-docker compose up --build
-```
-
-See [Configuration](#configuration) for all environment variables.
+Alternatives (demo-only, personal-only, two deploys): see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#alternative-setups).
 
 ## Project layout
 

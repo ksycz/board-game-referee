@@ -1,11 +1,15 @@
-# Render blueprint — public portfolio demo (see render.personal.yaml for private instance)
-# Full guide: docs/DEPLOYMENT.md
+# Render blueprint — recommended hybrid deploy (demo + family access + disk)
+# See docs/DEPLOYMENT.md. Alternatives: render.demo.yaml, render.personal.yaml
 services:
   - type: web
-    name: board-game-referee-demo
+    name: board-game-referee
     runtime: docker
     plan: free
     healthCheckPath: /api/health
+    disk:
+      name: referee-data
+      mountPath: /data
+      sizeGB: 1
     envVars:
       - key: ENVIRONMENT
         value: production
@@ -15,6 +19,8 @@ services:
         value: "1"
       - key: OCR_FALLBACK
         value: "1"
+      - key: DATA_DIR
+        value: /data
       - key: RETRIEVAL_TELEMETRY
         value: "0"
       - key: RULING_FEEDBACK
@@ -26,6 +32,8 @@ services:
       - key: RATE_LIMIT_EXPENSIVE_MAX
         value: "5"
       - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: API_ACCESS_KEY
         sync: false
       - key: CORS_ORIGINS
         sync: false

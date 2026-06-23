@@ -1,5 +1,5 @@
-# Render blueprint — public portfolio demo
-# https://render.com/docs/blueprint-spec
+# Alternative: demo-only (no API_ACCESS_KEY). Recommended: render.yaml (hybrid)
+# Full guide: docs/DEPLOYMENT.md
 services:
   - type: web
     name: board-game-referee-demo

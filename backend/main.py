@@ -35,7 +35,12 @@ from services.rulebook_store import DuplicateRulebookError
 from services.reindex_stream import stream_rulebook_reindex
 from services.upload_stream import stream_rulebook_upload
 from services.upload_utils import read_bounded_pdf_upload, safe_stored_filename
-from services.api_auth import AUTH_EXEMPT_PATHS, auth_enabled, verify_api_key
+from services.api_auth import (
+    AUTH_EXEMPT_PATHS,
+    api_key_required,
+    auth_enabled,
+    verify_api_key,
+)
 from services.demo_mode import (
     filter_visible_rulebooks,
     has_full_access,
@@ -106,7 +111,7 @@ app.add_middleware(
 async def enforce_api_security(request: Request, call_next):
     path = request.url.path
     if path.startswith("/api/"):
-        if auth_enabled() and path not in AUTH_EXEMPT_PATHS and not verify_api_key(request):
+        if api_key_required(request) and path not in AUTH_EXEMPT_PATHS and not verify_api_key(request):
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Invalid or missing API key."},
@@ -262,7 +267,7 @@ async def bgg_upload_stream(request: Request, body: BggImportRequest):
 @app.get("/api/config")
 def app_config(request: Request):
     return {
-        "auth_required": auth_enabled(),
+        "auth_required": auth_enabled() and not DEMO_MODE,
         "demo_mode": DEMO_MODE,
         "full_access": has_full_access(request),
     }
@@ -273,7 +278,7 @@ def health():
     data_dir_writable = _data_dir_writable()
     payload: dict[str, object] = {
         "status": "ok" if data_dir_writable else "degraded",
-        "auth_required": auth_enabled(),
+        "auth_required": auth_enabled() and not DEMO_MODE,
         "demo_mode": DEMO_MODE,
     }
     if IS_PRODUCTION:

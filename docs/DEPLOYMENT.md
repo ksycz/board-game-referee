@@ -1,189 +1,142 @@
 # Deployment guide
 
-Board Game Referee supports **two deployment profiles** from the same codebase:
+Board Game Referee is designed for a simple real-world pattern: **upload a rulebook, ask a question at the table, close the tab, come back weeks later** — from a **phone, laptop, or another device**.
 
-| Profile | Purpose | Who uses it |
-|---------|---------|-------------|
-| **Public demo** | Portfolio / recruiters | Anyone with the README link |
-| **Personal** | Full app for you and invited users | You, your husband, a few close friends |
+The **recommended setup** is **one cloud deploy** with:
 
-Use **separate hosting instances** so your private rulebooks never mix with public demo traffic.
-
----
-
-## Architecture overview
-
-```
-┌─────────────────────────────┐     ┌─────────────────────────────┐
-│  DEMO INSTANCE (public)     │     │  PERSONAL INSTANCE (private) │
-│  ─────────────────────      │     │  ──────────────────────────  │
-│  DEMO_MODE=1                │     │  DEMO_MODE=0                 │
-│  no API_ACCESS_KEY          │     │  API_ACCESS_KEY=secret       │
-│  pre-seeded sample game     │     │  persistent volume           │
-│  read-only for visitors     │     │  invite links ?access=SECRET │
-│  in README / portfolio      │     │  not linked from README      │
-└─────────────────────────────┘     └─────────────────────────────┘
-```
-
-Both instances use the same Docker image. Only environment variables differ.
+- a **public demo** for recruiters (pre-seeded sample game, no upload)
+- **full access** for you and family via an invite link
+- a **persistent disk** so uploaded PDFs survive restarts
 
 ---
 
-## 1. Public demo (portfolio)
+## Recommended: one deploy, two access levels
 
-**Goal:** Recruiters open one link and ask a question on a sample rulebook in under a minute.
+```
+https://your-app.example.com
+│
+├── Public (README link, no secret)
+│   └── Demo only — sample game, ask / search / dispute
+│
+└── Family (?access=SECRET bookmark on each device)
+    └── Full app — upload rulebooks, your library everywhere
+```
+
+| Who | URL | Access |
+|-----|-----|--------|
+| Recruiters | `https://your-app.example.com` | Demo sample game |
+| You, husband, close friends | `https://your-app.example.com/?access=SECRET` | Full app, shared library |
+
+**Typical session:** upload PDF → ask 1–3 questions → forget about it until the next game night. Rulebooks stay on the server volume; chat history is per-browser (see [Cross-device notes](#cross-device-notes)).
 
 ### Environment variables
 
-Copy [`deploy/demo.env.example`](../deploy/demo.env.example) and set:
+Copy [`deploy/hybrid.env.example`](../deploy/hybrid.env.example) → `deploy/hybrid.env`:
 
 | Variable | Value |
 |----------|--------|
 | `ENVIRONMENT` | `production` |
 | `DEMO_MODE` | `1` |
-| `PRESEED_DEMO_RULEBOOK` | `1` (default when `DEMO_MODE=1`) |
+| `PRESEED_DEMO_RULEBOOK` | `1` |
+| `API_ACCESS_KEY` | Long random secret (`openssl rand -hex 32`) |
 | `ANTHROPIC_API_KEY` | Your API key |
-| `CORS_ORIGINS` | `https://your-demo-url.onrender.com` |
-| `API_ACCESS_KEY` | **Leave unset** |
-| `RATE_LIMIT_LLM_MAX` | `15` (recommended for public demo) |
+| `CORS_ORIGINS` | `https://your-exact-app-url` (no trailing slash) |
+| `DATA_DIR` | `/data` with a **persistent volume** mounted |
+| `OCR_FALLBACK` | `1` |
+| `RATE_LIMIT_LLM_MAX` | `15` (tune for public demo traffic) |
 | `RETRIEVAL_TELEMETRY` | `0` |
 | `RULING_FEEDBACK` | `0` |
 
-Also set a **monthly spending limit** on your Anthropic API key in the Anthropic console.
+Set a **monthly spending limit** on your Anthropic key in the [Anthropic console](https://console.anthropic.com).
 
-### What visitors can do
+### Deploy on Fly.io (recommended — persistent volume)
 
-- Ask, search, and dispute on the **pre-seeded sample game**
-- See citations and page previews
+Fly attaches a volume at `/data` so uploads survive deploys and restarts.
 
-### What visitors cannot do
-
-- Upload PDFs
-- Delete or pin rulebooks
-- Re-index, BGG import, clear FAQ cache
-
-The UI shows a **Public demo** banner and hides library-management controls.
+1. Install [`flyctl`](https://fly.io/docs/hands-on/install-flyctl/).
+2. From the repo root: `fly launch` (use the included Dockerfile, don’t add a second Postgres/Redis).
+3. Create a volume in the same region as your app:
+   ```bash
+   fly volumes create referee_data --size 1 --region <your-region>
+   ```
+4. Mount `/data` in `fly.toml` (Fly may prompt during launch):
+   ```toml
+   [mounts]
+     source = "referee_data"
+     destination = "/data"
+   ```
+5. Set secrets:
+   ```bash
+   fly secrets set \
+     ANTHROPIC_API_KEY=sk-... \
+     API_ACCESS_KEY=$(openssl rand -hex 32) \
+     CORS_ORIGINS=https://your-app.fly.dev \
+     DEMO_MODE=1 \
+     PRESEED_DEMO_RULEBOOK=1 \
+     ENVIRONMENT=production \
+     DATA_DIR=/data
+   ```
+6. `fly deploy`
+7. Smoke test:
+   - Public: `https://your-app.fly.dev` → sample game → ask a question
+   - Family: `https://your-app.fly.dev/?access=YOUR_API_ACCESS_KEY` → upload a PDF
 
 ### Deploy on Render
 
-1. Push this repo to GitHub.
-2. Create a **New Web Service** → connect repo → **Docker** runtime.
-3. Use [`render.demo.yaml`](../render.demo.yaml) or set env vars manually.
-4. Set secrets in the Render dashboard: `ANTHROPIC_API_KEY`, `CORS_ORIGINS`.
-5. Deploy and open `https://your-service.onrender.com`.
-6. Add the URL to your README under **Live demo**.
+Render can run the same hybrid config. **Attach a persistent disk** — the free tier without disk will wipe uploads on restart.
 
-### Deploy locally (demo)
+1. New **Web Service** → repo → **Docker** runtime.
+2. Use [`render.yaml`](../render.yaml) or set env vars from [`deploy/hybrid.env.example`](../deploy/hybrid.env.example).
+3. Add a disk mounted at `/data`; set `DATA_DIR=/data`.
+4. Set secrets: `ANTHROPIC_API_KEY`, `API_ACCESS_KEY`, `CORS_ORIGINS`.
+5. Add the **public** URL to your README (no `?access=`).
 
-```bash
-cp deploy/demo.env.example deploy/demo.env
-# Edit deploy/demo.env — set ANTHROPIC_API_KEY
-
-docker compose -f docker-compose.demo.yml --env-file deploy/demo.env up --build
-```
-
-Open http://localhost:8000 — the sample game should appear in the library.
-
-### Free-tier notes
-
-- **Cold starts:** Render free sleeps after ~15 min idle; first visit may take 30–60s.
-- **Ephemeral disk:** Uploads on the demo instance are not meant to persist; the sample game is re-seeded on startup if missing.
-
----
-
-## 2. Personal instance (full app)
-
-**Goal:** Upload your real rulebooks, use all features, share with your husband via invite link.
-
-### Environment variables
-
-Copy [`deploy/personal.env.example`](../deploy/personal.env.example) and set:
-
-| Variable | Value |
-|----------|--------|
-| `ENVIRONMENT` | `production` |
-| `DEMO_MODE` | `0` |
-| `PRESEED_DEMO_RULEBOOK` | `0` |
-| `ANTHROPIC_API_KEY` | Your API key (can be same or separate key) |
-| `API_ACCESS_KEY` | Long random secret (`openssl rand -hex 32`) |
-| `CORS_ORIGINS` | `https://your-private-url.fly.dev` |
-| `DATA_DIR` | `/data` with a **persistent volume** attached |
-
-Do **not** put this URL in your public README.
-
-### Sharing with your husband
-
-Send an invite link (the access code is stored for that browser session):
-
-```
-https://your-private-url.fly.dev/?access=YOUR_API_ACCESS_KEY
-```
-
-The `?access=` parameter is removed from the address bar after load. He can also paste the code on the access gate screen.
-
-### Deploy on Fly.io (recommended for persistence)
-
-Fly supports attached volumes so uploads survive restarts.
-
-1. Install [`flyctl`](https://fly.io/docs/hands-on/install-flyctl/).
-2. `fly launch` from the repo root (use the included Dockerfile).
-3. Create a volume: `fly volumes create referee_data --size 1`
-4. Mount it at `/data` in `fly.toml`.
-5. Set secrets:
-   ```bash
-   fly secrets set ANTHROPIC_API_KEY=sk-... API_ACCESS_KEY=... CORS_ORIGINS=https://...
-   fly secrets set DEMO_MODE=0 ENVIRONMENT=production
-   ```
-6. Deploy: `fly deploy`
-
-See [`render.personal.yaml`](../render.personal.yaml) for Render-based personal deploy (attach a disk if available on your plan).
-
-### Deploy locally (personal)
+### Local Docker (hybrid)
 
 ```bash
-cp deploy/personal.env.example deploy/personal.env
-# Edit deploy/personal.env
+cp deploy/hybrid.env.example deploy/hybrid.env
+# Edit deploy/hybrid.env — set ANTHROPIC_API_KEY and API_ACCESS_KEY
 
-docker compose -f docker-compose.personal.yml --env-file deploy/personal.env up --build
+docker compose -f docker-compose.hybrid.yml --env-file deploy/hybrid.env up --build
 ```
 
-Open http://localhost:8000/?access=YOUR_API_ACCESS_KEY
+- Public demo: http://localhost:8000  
+- Full access: http://localhost:8000/?access=YOUR_API_ACCESS_KEY  
 
 ---
 
-## 3. Local development
+## Cross-device notes
 
-No demo mode, no API key — full features:
+| Data | Where it lives | Cross-device? |
+|------|----------------|---------------|
+| **Rulebooks (PDFs + index)** | Server volume (`DATA_DIR`) | ✅ Same library on phone and laptop after `?access=` |
+| **Chat / recent rulings** | Browser `localStorage` | ❌ Per device and browser — new phone = fresh conversation, same rulebooks |
+| **Access code** | `sessionStorage` after `?access=` | Re-bookmark `?access=SECRET` on each device; survives until you quit the browser |
 
-```bash
-./scripts/dev.sh
-```
-
-Frontend: http://localhost:5173  
-Backend: http://localhost:8000
-
----
-
-## 4. Environment reference
-
-| Variable | Demo | Personal | Local dev |
-|----------|------|----------|-----------|
-| `DEMO_MODE` | `1` | `0` | unset / `0` |
-| `PRESEED_DEMO_RULEBOOK` | `1` | `0` | unset / `0` |
-| `API_ACCESS_KEY` | unset | **required** | unset |
-| `ENVIRONMENT` | `production` | `production` | unset |
-| `RATE_LIMIT_ENABLED` | `1` | `1` | `0` |
-| `RETRIEVAL_TELEMETRY` | `0` | optional | `1` |
-| `RULING_FEEDBACK` | `0` | optional | `1` |
-| `OCR_FALLBACK` | `1` | `1` | `0` |
-
-Full list: [`backend/.env.example`](../backend/.env.example) and [README Configuration](../README.md#configuration).
+**On each device:** bookmark the family URL once. Don’t put it in the README or GitHub.
 
 ---
 
-## 5. API behaviour
+## What each access level can do
 
-### `/api/config` (public)
+### Public (no API key)
+
+- Ask, search, dispute on the **pre-seeded sample game**
+- Citations and page previews
+- UI shows a **Public demo** banner
+
+Cannot: upload, delete, pin, re-index, BGG import, clear FAQ cache.
+
+### Family (valid `?access=` or `X-API-Key`)
+
+- Everything: upload rulebooks, full library, all devices sharing the same server data
+- No demo banner; upload controls visible
+
+---
+
+## API behaviour
+
+### `GET /api/config`
 
 ```json
 {
@@ -193,60 +146,134 @@ Full list: [`backend/.env.example`](../backend/.env.example) and [README Configu
 }
 ```
 
-- `auth_required` — `true` when `API_ACCESS_KEY` is set
-- `demo_mode` — `true` when `DEMO_MODE=1`
-- `full_access` — `true` when not in demo mode, or request includes valid API key
+| Field | Meaning |
+|-------|---------|
+| `auth_required` | `true` only on **personal-only** deploys (`DEMO_MODE=0` + key). Hybrid demo stays open to anonymous users. |
+| `demo_mode` | `true` when `DEMO_MODE=1` |
+| `full_access` | `true` with a valid API key, or when not in demo mode |
 
-### Demo mode restrictions (anonymous users)
+### Demo restrictions (anonymous + `DEMO_MODE=1`)
 
-| Endpoint | Allowed |
-|----------|---------|
+| Endpoint | Anonymous |
+|----------|-----------|
 | `GET /api/rulebooks` | Demo rulebooks only |
 | `POST .../ask`, `.../dispute`, `.../search` | Demo rulebooks only |
-| `GET .../preview`, `.../examples` | Demo rulebooks only |
 | Upload, delete, pin, reindex, BGG | **403** `demo_readonly` |
 
-Authenticated requests (valid `X-API-Key` or `Authorization: Bearer`) bypass demo restrictions even on a demo-configured instance (hybrid mode — optional, not the recommended two-instance setup).
+Requests with a valid API key bypass demo restrictions on the same instance.
 
 ---
 
-## 6. Checklist
+## Checklist (recommended hybrid deploy)
 
-### Demo instance (portfolio)
-
-- [ ] `DEMO_MODE=1`, no `API_ACCESS_KEY`
-- [ ] `CORS_ORIGINS` matches demo URL
-- [ ] Anthropic spending cap set
-- [ ] Live smoke test: open URL → sample game visible → ask a question → citation appears
-- [ ] README updated with live demo link and example question
-
-### Personal instance
-
-- [ ] `DEMO_MODE=0`, `API_ACCESS_KEY` set
-- [ ] Persistent volume on `DATA_DIR`
-- [ ] Invite link tested in a private browser window
-- [ ] URL **not** in public README
+- [ ] `DEMO_MODE=1`, `API_ACCESS_KEY` set, `PRESEED_DEMO_RULEBOOK=1`
+- [ ] Persistent volume on `/data` (not ephemeral-only hosting)
+- [ ] `CORS_ORIGINS` matches your public URL exactly
+- [ ] Anthropic monthly spend cap set
+- [ ] Public smoke test: sample game → ask → citation
+- [ ] Family smoke test: `?access=` → upload PDF → ask (second device optional)
+- [ ] README lists **public URL only**
+- [ ] Family bookmark saved on phone and laptop
 
 ---
 
-## 7. Troubleshooting
+## Local development
+
+Full features, no demo mode, no API key:
+
+```bash
+./scripts/dev.sh
+```
+
+Frontend: http://localhost:5173 · Backend: http://localhost:8000
+
+Data persists in `backend/data/` on your machine between runs.
+
+---
+
+## Alternative setups
+
+Use these only if the recommended hybrid deploy doesn’t fit.
+
+### A. Demo-only cloud (portfolio, no family cloud)
+
+For README/recruiters only; you use local dev or a separate setup for personal use.
+
+| | |
+|--|--|
+| **Env** | `DEMO_MODE=1`, **no** `API_ACCESS_KEY` |
+| **Template** | [`deploy/demo.env.example`](../deploy/demo.env.example) |
+| **Compose** | `docker-compose.demo.yml` |
+| **Blueprint** | [`render.demo.yaml`](../render.demo.yaml) |
+| **Tradeoff** | No cross-device personal library in the cloud |
+
+### B. Personal-only cloud (no public demo)
+
+Private app behind access gate; not suitable for a README live demo.
+
+| | |
+|--|--|
+| **Env** | `DEMO_MODE=0`, `API_ACCESS_KEY` required for all API calls |
+| **Template** | [`deploy/personal.env.example`](../deploy/personal.env.example) |
+| **Compose** | `docker-compose.personal.yml` |
+| **Blueprint** | [`render.personal.yaml`](../render.personal.yaml) |
+| **Tradeoff** | Recruiters need the secret — use hybrid instead |
+
+### C. Two separate cloud deploys (maximum isolation)
+
+Demo instance (public, ephemeral OK) + personal instance (private, volume). Same env split as sections A and B on two hosts.
+
+| Pluses | Minuses |
+|--------|---------|
+| Hard separation of public and private data | 2× deploys, 2× cold starts, 2× config |
+| Demo abuse isolated from your library | More ops for sporadic personal use |
+
+See [`render.demo.yaml`](../render.demo.yaml) and [`render.personal.yaml`](../render.personal.yaml).
+
+### D. Local personal only
+
+`./scripts/dev.sh` or `docker-compose.personal.yml` on your Mac.
+
+| Pluses | Minuses |
+|--------|---------|
+| Simplest, free, persistent local `data/` | No access from phone unless machine is running |
+
+---
+
+## Environment reference
+
+| Variable | Hybrid (recommended) | Demo-only | Personal-only | Local dev |
+|----------|-------------------|-----------|---------------|-----------|
+| `DEMO_MODE` | `1` | `1` | `0` | `0` |
+| `PRESEED_DEMO_RULEBOOK` | `1` | `1` | `0` | `0` |
+| `API_ACCESS_KEY` | **set** | unset | **set** | unset |
+| `DATA_DIR` | `/data` + volume | optional | `/data` + volume | `./data` |
+| `ENVIRONMENT` | `production` | `production` | `production` | unset |
+
+Full list: [`backend/.env.example`](../backend/.env.example) · [README Configuration](../README.md#configuration)
+
+---
+
+## Troubleshooting
 
 | Problem | Fix |
 |---------|-----|
-| Access gate on personal instance | Open `?access=YOUR_KEY` or set key on gate screen |
-| Empty library on demo | Check logs for seed errors; ensure `backend/assets/demo-rulebook.pdf` is in the image |
-| 401 on personal instance | `VITE_API_ACCESS_KEY` not needed if using `?access=` links; key must match `API_ACCESS_KEY` |
-| 403 demo_readonly | Expected on demo — use personal instance to upload |
-| Cold start timeout | Normal on Render free; mention in README |
+| Recruiters see access gate | Hybrid should not gate anonymous users — ensure `DEMO_MODE=1` |
+| Uploads vanished after redeploy | Attach a persistent volume; free ephemeral disk resets |
+| Access gate on personal-only deploy | Open `?access=YOUR_KEY` or enter code on gate screen |
+| Empty library on demo | Check logs for seed errors; `backend/assets/demo-rulebook.pdf` must be in image |
+| 403 `demo_readonly` | Expected without key — use family bookmark |
+| 401 with key | Key must match `API_ACCESS_KEY`; try `?access=` again |
 | CORS errors | `CORS_ORIGINS` must exactly match browser URL (no trailing slash) |
+| Cold start | Normal on free tiers; note in README (~30–60s) |
 
 ---
 
-## 8. Cost control
+## Cost control
 
-1. **Anthropic console** — set monthly spend limit per API key (use separate keys for demo vs personal if you want).
-2. **Rate limits** — tune `RATE_LIMIT_LLM_MAX` on the demo instance.
-3. **FAQ cache** — enabled by default; repeat questions skip the LLM.
+1. **Anthropic console** — monthly spend limit on your API key.
+2. **Rate limits** — `RATE_LIMIT_LLM_MAX` caps anonymous demo ask/dispute volume.
+3. **FAQ cache** — repeat identical questions skip the LLM.
 
 ---
 
@@ -254,10 +281,10 @@ Authenticated requests (valid `X-API-Key` or `Authorization: Bearer`) bypass dem
 
 | File | Purpose |
 |------|---------|
-| [`deploy/demo.env.example`](../deploy/demo.env.example) | Demo env template |
-| [`deploy/personal.env.example`](../deploy/personal.env.example) | Personal env template |
-| [`docker-compose.demo.yml`](../docker-compose.demo.yml) | Local demo Docker |
-| [`docker-compose.personal.yml`](../docker-compose.personal.yml) | Local personal Docker |
-| [`render.demo.yaml`](../render.demo.yaml) | Render blueprint — demo |
-| [`render.personal.yaml`](../render.personal.yaml) | Render blueprint — personal |
+| [`deploy/hybrid.env.example`](../deploy/hybrid.env.example) | **Recommended** env template |
+| [`docker-compose.hybrid.yml`](../docker-compose.hybrid.yml) | Local hybrid Docker |
+| [`render.yaml`](../render.yaml) | Render blueprint — hybrid |
+| [`deploy/demo.env.example`](../deploy/demo.env.example) | Demo-only alternative |
+| [`deploy/personal.env.example`](../deploy/personal.env.example) | Personal-only alternative |
+| [`render.demo.yaml`](../render.demo.yaml) / [`render.personal.yaml`](../render.personal.yaml) | Two-deploy alternative |
 | [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) | CI on push |
