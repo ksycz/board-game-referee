@@ -8,7 +8,7 @@ from fastapi import Request
 
 import config
 
-AUTH_EXEMPT_PATHS = frozenset({"/api/health"})
+AUTH_EXEMPT_PATHS = frozenset({"/api/health", "/api/config"})
 
 
 def auth_enabled() -> bool:

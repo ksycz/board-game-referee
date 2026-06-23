@@ -17,16 +17,37 @@ TOP_K_CHUNKS = int(os.getenv("TOP_K_CHUNKS", "6"))
 CHUNK_MAX_CHARS = int(os.getenv("CHUNK_MAX_CHARS", "600"))
 CHUNK_MIN_CHARS = int(os.getenv("CHUNK_MIN_CHARS", "100"))
 
-_telemetry = os.getenv("RETRIEVAL_TELEMETRY", "1").strip().lower()
-RETRIEVAL_TELEMETRY = _telemetry in ("1", "true", "yes", "on")
+ENVIRONMENT = os.getenv("ENVIRONMENT", "").strip().lower()
+IS_PRODUCTION = ENVIRONMENT in ("production", "prod")
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+_telemetry_default = not IS_PRODUCTION
+_telemetry = os.getenv("RETRIEVAL_TELEMETRY")
+RETRIEVAL_TELEMETRY = (
+    _env_bool("RETRIEVAL_TELEMETRY", _telemetry_default)
+    if _telemetry is not None
+    else _telemetry_default
+)
 RETRIEVAL_LOG_PATH = Path(
     os.getenv("RETRIEVAL_LOG_PATH", str(DATA_DIR / "retrieval_telemetry.jsonl"))
 )
 RULING_FEEDBACK_LOG_PATH = Path(
     os.getenv("RULING_FEEDBACK_LOG_PATH", str(DATA_DIR / "ruling_feedback.jsonl"))
 )
-_feedback = os.getenv("RULING_FEEDBACK", "1").strip().lower()
-RULING_FEEDBACK_ENABLED = _feedback in ("1", "true", "yes", "on")
+_feedback_default = not IS_PRODUCTION
+_feedback = os.getenv("RULING_FEEDBACK")
+RULING_FEEDBACK_ENABLED = (
+    _env_bool("RULING_FEEDBACK", _feedback_default)
+    if _feedback is not None
+    else _feedback_default
+)
 
 _faq_cache = os.getenv("FAQ_CACHE", "1").strip().lower()
 FAQ_CACHE_ENABLED = _faq_cache in ("1", "true", "yes", "on")
@@ -46,17 +67,13 @@ CORS_ORIGINS = [origin.strip() for origin in _cors.split(",") if origin.strip()]
 
 API_ACCESS_KEY = os.getenv("API_ACCESS_KEY", "").strip()
 
-
-def _env_bool(name: str, default: bool = False) -> bool:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    return raw.strip().lower() in ("1", "true", "yes", "on")
+DEMO_MODE = _env_bool("DEMO_MODE", False)
+_preseed_default = DEMO_MODE
+PRESEED_DEMO_RULEBOOK = _env_bool("PRESEED_DEMO_RULEBOOK", _preseed_default)
 
 
 def _rate_limit_default_enabled() -> bool:
-    env = os.getenv("ENVIRONMENT", "").strip().lower()
-    return env in ("production", "prod") or bool(API_ACCESS_KEY)
+    return IS_PRODUCTION or bool(API_ACCESS_KEY)
 
 
 RATE_LIMIT_ENABLED = _env_bool("RATE_LIMIT_ENABLED", _rate_limit_default_enabled())

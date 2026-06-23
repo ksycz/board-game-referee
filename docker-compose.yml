@@ -1,10 +1,16 @@
 services:
   app:
-    build: .
+    build:
+      context: .
+      args:
+        VITE_API_ACCESS_KEY: ${VITE_API_ACCESS_KEY:-}
     ports:
       - "8000:8000"
     environment:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      API_ACCESS_KEY: ${API_ACCESS_KEY:-}
+      ENVIRONMENT: production
+      OCR_FALLBACK: "1"
       CORS_ORIGINS: http://localhost:8000
     volumes:
       - referee-data:/data

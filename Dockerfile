@@ -13,6 +13,7 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
 
 COPY backend/requirements.txt .
@@ -23,6 +24,8 @@ COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
 WORKDIR /app/backend
 ENV DATA_DIR=/data
+ENV ENVIRONMENT=production
+ENV OCR_FALLBACK=1
 VOLUME /data
 
 EXPOSE 8000

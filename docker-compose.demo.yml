@@ -1,0 +1,11 @@
+# Local public demo — docker compose -f docker-compose.demo.yml --env-file deploy/demo.env up --build
+services:
+  app:
+    build:
+      context: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - deploy/demo.env
+    environment:
+      CORS_ORIGINS: http://localhost:8000

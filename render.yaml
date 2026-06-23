@@ -1,0 +1,31 @@
+# Render blueprint — public portfolio demo (see render.personal.yaml for private instance)
+# Full guide: docs/DEPLOYMENT.md
+services:
+  - type: web
+    name: board-game-referee-demo
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DEMO_MODE
+        value: "1"
+      - key: PRESEED_DEMO_RULEBOOK
+        value: "1"
+      - key: OCR_FALLBACK
+        value: "1"
+      - key: RETRIEVAL_TELEMETRY
+        value: "0"
+      - key: RULING_FEEDBACK
+        value: "0"
+      - key: RATE_LIMIT_ENABLED
+        value: "1"
+      - key: RATE_LIMIT_LLM_MAX
+        value: "15"
+      - key: RATE_LIMIT_EXPENSIVE_MAX
+        value: "5"
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false

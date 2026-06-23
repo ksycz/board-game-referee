@@ -1,0 +1,16 @@
+# Local private instance — docker compose -f docker-compose.personal.yml --env-file deploy/personal.env up --build
+services:
+  app:
+    build:
+      context: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - deploy/personal.env
+    environment:
+      CORS_ORIGINS: http://localhost:8000
+    volumes:
+      - referee-data:/data
+
+volumes:
+  referee-data:

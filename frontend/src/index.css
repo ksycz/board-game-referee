@@ -2855,3 +2855,71 @@ details pre {
     animation: none;
   }
 }
+
+.notice-banner.demo-banner {
+  border-color: rgba(201, 162, 39, 0.45);
+  background: rgba(201, 162, 39, 0.08);
+}
+
+.access-gate {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background:
+    radial-gradient(circle at top, rgba(201, 162, 39, 0.12), transparent 55%),
+    var(--bg);
+}
+
+.access-gate-card {
+  width: min(100%, 28rem);
+  padding: 1.75rem;
+  border-radius: 1rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+}
+
+.access-gate-card h1 {
+  margin: 0 0 0.75rem;
+  font-size: 1.5rem;
+}
+
+.access-gate-card p {
+  margin: 0 0 1rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.access-gate-card form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.access-gate-card label {
+  font-weight: 600;
+}
+
+.access-gate-card input {
+  width: 100%;
+  padding: 0.75rem 0.9rem;
+  border-radius: 0.65rem;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.access-gate-card button {
+  padding: 0.8rem 1rem;
+  border: none;
+  border-radius: 0.65rem;
+  background: var(--accent);
+  color: #1a1408;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.access-gate-error {
+  margin: 0;
+  color: #ffb4b4;
+}

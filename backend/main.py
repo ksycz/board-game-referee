@@ -7,6 +7,8 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Literal
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
@@ -14,7 +16,15 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from agents.pipeline import RefereePipeline
-from config import CORS_ORIGINS, DATA_DIR, MODEL, OCR_FALLBACK, ensure_dirs
+from config import (
+    CORS_ORIGINS,
+    DATA_DIR,
+    DEMO_MODE,
+    IS_PRODUCTION,
+    MODEL,
+    OCR_FALLBACK,
+    ensure_dirs,
+)
 from errors import RateLimitError
 from services.frontend_static import resolve_frontend_asset
 from services.http_errors import GENERIC_BGG_LOOKUP_ERROR, server_error
@@ -26,6 +36,13 @@ from services.reindex_stream import stream_rulebook_reindex
 from services.upload_stream import stream_rulebook_upload
 from services.upload_utils import read_bounded_pdf_upload, safe_stored_filename
 from services.api_auth import AUTH_EXEMPT_PATHS, auth_enabled, verify_api_key
+from services.demo_mode import (
+    filter_visible_rulebooks,
+    has_full_access,
+    require_full_access,
+    require_rulebook_access,
+)
+from services.demo_seed import seed_demo_rulebook_if_needed
 from services.rate_limit import check_rate_limit, rate_limit_enabled
 
 logger = logging.getLogger(__name__)
@@ -51,7 +68,22 @@ def _e2e_stub_enabled() -> bool:
     return True
 
 
-app = FastAPI(title="Board Game Rules Referee", version="0.1.0")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    removed = pipeline.dedupe_rulebooks()
+    if removed:
+        logger.info("Removed %s duplicate rulebook(s) at startup", removed)
+    demo_id = seed_demo_rulebook_if_needed(pipeline)
+    if demo_id:
+        logger.info("Demo rulebook ready: %s", demo_id)
+    yield
+
+
+app = FastAPI(
+    title="Board Game Rules Referee",
+    version="0.1.0",
+    lifespan=lifespan,
+)
 pipeline = RefereePipeline()
 
 if _e2e_stub_enabled():
@@ -160,11 +192,19 @@ async def _read_upload_pdf(file: UploadFile) -> tuple[bytes, str]:
     return content, file.filename
 
 
+@app.get("/api/rulebooks")
+def list_rulebooks(request: Request):
+    books = filter_visible_rulebooks(request, pipeline.store.list())
+    return [asdict(book) for book in books]
+
+
 @app.post("/api/rulebooks/upload-stream")
 async def upload_rulebook_stream(
+    request: Request,
     file: UploadFile = File(...),
     name: str | None = Form(default=None),
 ):
+    require_full_access(request)
     content, original_filename = await _read_upload_pdf(file)
     display_name = (name or "").strip() or None
     stored_name = f"{uuid.uuid4()}_{_safe_filename(original_filename)}"
@@ -186,7 +226,8 @@ async def upload_rulebook_stream(
 
 
 @app.post("/api/rulebooks/bgg/lookup")
-def bgg_lookup(body: BggLookupRequest):
+def bgg_lookup(request: Request, body: BggLookupRequest):
+    require_full_access(request)
     try:
         return lookup_rulebooks(body.url)
     except BggError as exc:
@@ -197,7 +238,8 @@ def bgg_lookup(body: BggLookupRequest):
 
 
 @app.post("/api/rulebooks/bgg/upload-stream")
-async def bgg_upload_stream(body: BggImportRequest):
+async def bgg_upload_stream(request: Request, body: BggImportRequest):
+    require_full_access(request)
     display_name = (body.name or "").strip() or None
     filename_hint = (body.filename or "").strip() or None
     bgg_url = (body.bgg_url or "").strip() or None
@@ -217,19 +259,38 @@ async def bgg_upload_stream(body: BggImportRequest):
     )
 
 
+@app.get("/api/config")
+def app_config(request: Request):
+    return {
+        "auth_required": auth_enabled(),
+        "demo_mode": DEMO_MODE,
+        "full_access": has_full_access(request),
+    }
+
+
 @app.get("/api/health")
 def health():
     data_dir_writable = _data_dir_writable()
+    payload: dict[str, object] = {
+        "status": "ok" if data_dir_writable else "degraded",
+        "auth_required": auth_enabled(),
+        "demo_mode": DEMO_MODE,
+    }
+    if IS_PRODUCTION:
+        return payload
+
     tesseract_installed = ensure_tesseract_path()
     ocr_fallback_enabled = OCR_FALLBACK
-    return {
-        "status": "ok" if data_dir_writable else "degraded",
-        "model": MODEL,
-        "ocr_fallback_enabled": ocr_fallback_enabled,
-        "tesseract_installed": tesseract_installed,
-        "ocr_available": ocr_fallback_enabled and tesseract_installed,
-        "data_dir_writable": data_dir_writable,
-    }
+    payload.update(
+        {
+            "model": MODEL,
+            "ocr_fallback_enabled": ocr_fallback_enabled,
+            "tesseract_installed": tesseract_installed,
+            "ocr_available": ocr_fallback_enabled and tesseract_installed,
+            "data_dir_writable": data_dir_writable,
+        }
+    )
+    return payload
 
 
 def _data_dir_writable() -> bool:
@@ -245,15 +306,16 @@ def _data_dir_writable() -> bool:
 
 @app.get("/api/rulebooks")
 def list_rulebooks():
-    pipeline.dedupe_rulebooks()
     return [asdict(book) for book in pipeline.store.list()]
 
 
 @app.post("/api/rulebooks")
 async def upload_rulebook(
+    request: Request,
     file: UploadFile = File(...),
     name: str | None = Form(default=None),
 ):
+    require_full_access(request)
     content, original_filename = await _read_upload_pdf(file)
     display_name = (name or "").strip() or None
     stored_name = f"{uuid.uuid4()}_{_safe_filename(original_filename)}"
@@ -286,7 +348,8 @@ async def upload_rulebook(
 
 
 @app.get("/api/rulebooks/{rulebook_id}/examples")
-def rulebook_examples(rulebook_id: str):
+def rulebook_examples(request: Request, rulebook_id: str):
+    require_rulebook_access(request, pipeline.store, rulebook_id)
     try:
         return {"questions": pipeline.example_questions(rulebook_id)}
     except KeyError:
@@ -294,14 +357,16 @@ def rulebook_examples(rulebook_id: str):
 
 
 @app.delete("/api/rulebooks/{rulebook_id}")
-def delete_rulebook(rulebook_id: str):
+def delete_rulebook(request: Request, rulebook_id: str):
+    require_full_access(request)
     if not pipeline.delete_rulebook(rulebook_id):
         raise HTTPException(status_code=404, detail="Rulebook not found")
     return {"deleted": rulebook_id}
 
 
 @app.patch("/api/rulebooks/{rulebook_id}/pin")
-def pin_rulebook(rulebook_id: str, body: PinRequest):
+def pin_rulebook(request: Request, rulebook_id: str, body: PinRequest):
+    require_full_access(request)
     book = pipeline.set_rulebook_pinned(rulebook_id, body.pinned)
     if not book:
         raise HTTPException(status_code=404, detail="Rulebook not found")
@@ -309,7 +374,8 @@ def pin_rulebook(rulebook_id: str, body: PinRequest):
 
 
 @app.post("/api/rulebooks/{rulebook_id}/reindex-stream")
-async def reindex_rulebook_stream(rulebook_id: str):
+async def reindex_rulebook_stream(request: Request, rulebook_id: str):
+    require_full_access(request)
     return StreamingResponse(
         stream_rulebook_reindex(pipeline, rulebook_id=rulebook_id),
         media_type="text/event-stream",
@@ -321,7 +387,8 @@ async def reindex_rulebook_stream(rulebook_id: str):
 
 
 @app.delete("/api/rulebooks/{rulebook_id}/faq-cache")
-def clear_faq_cache(rulebook_id: str):
+def clear_faq_cache(request: Request, rulebook_id: str):
+    require_full_access(request)
     try:
         cleared = pipeline.clear_faq_cache(rulebook_id)
     except KeyError:
@@ -330,7 +397,8 @@ def clear_faq_cache(rulebook_id: str):
 
 
 @app.get("/api/rulebooks/{rulebook_id}/pages/{page}/preview")
-def rulebook_page_preview(rulebook_id: str, page: int, zoom: float = 1.5):
+def rulebook_page_preview(request: Request, rulebook_id: str, page: int, zoom: float = 1.5):
+    require_rulebook_access(request, pipeline.store, rulebook_id)
     if page < 1:
         raise HTTPException(status_code=400, detail="Page number must be at least 1")
     zoom = max(1.0, min(4.0, zoom))
@@ -346,7 +414,8 @@ def rulebook_page_preview(rulebook_id: str, page: int, zoom: float = 1.5):
 
 
 @app.post("/api/rulebooks/{rulebook_id}/search")
-def search_rulebook(rulebook_id: str, body: SearchRequest):
+def search_rulebook(request: Request, rulebook_id: str, body: SearchRequest):
+    require_rulebook_access(request, pipeline.store, rulebook_id)
     try:
         return pipeline.quick_search(
             rulebook_id,
@@ -360,7 +429,8 @@ def search_rulebook(rulebook_id: str, body: SearchRequest):
 
 
 @app.post("/api/rulebooks/{rulebook_id}/ask")
-def ask_rulebook(rulebook_id: str, body: AskRequest):
+def ask_rulebook(request: Request, rulebook_id: str, body: AskRequest):
+    require_rulebook_access(request, pipeline.store, rulebook_id)
     try:
         history = [msg.model_dump() for msg in body.history]
         return pipeline.ask(rulebook_id, body.question, body.top_k, history)
@@ -375,7 +445,8 @@ def ask_rulebook(rulebook_id: str, body: AskRequest):
 
 
 @app.post("/api/rulebooks/{rulebook_id}/feedback")
-def ruling_feedback(rulebook_id: str, body: RulingFeedbackRequest):
+def ruling_feedback(request: Request, rulebook_id: str, body: RulingFeedbackRequest):
+    require_rulebook_access(request, pipeline.store, rulebook_id)
     try:
         pipeline.record_feedback(rulebook_id, body.model_dump())
     except KeyError:
@@ -384,7 +455,8 @@ def ruling_feedback(rulebook_id: str, body: RulingFeedbackRequest):
 
 
 @app.post("/api/rulebooks/{rulebook_id}/dispute")
-def dispute_rulebook(rulebook_id: str, body: DisputeRequest):
+def dispute_rulebook(request: Request, rulebook_id: str, body: DisputeRequest):
+    require_rulebook_access(request, pipeline.store, rulebook_id)
     try:
         history = [msg.model_dump() for msg in body.history]
         return pipeline.dispute(

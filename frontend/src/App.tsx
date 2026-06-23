@@ -189,7 +189,13 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return target.isContentEditable;
 }
 
-export default function App() {
+export default function App({
+  fullAccess = true,
+  demoMode = false,
+}: {
+  fullAccess?: boolean;
+  demoMode?: boolean;
+}) {
   const [rulebooks, setRulebooks] = useState<Rulebook[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [threads, setThreads] = useState<Record<string, Message[]>>(() => loadAllThreads());
@@ -919,12 +925,30 @@ export default function App() {
             <span className="brand-title-main">Rules</span>
             <span className="brand-title-accent">Referee</span>
           </h1>
-          <p>Settle arguments with cited rulings — upload a rulebook and roll.</p>
+          <p>
+            {demoMode && !fullAccess
+              ? "Try the sample rulebook — ask questions and see cited rulings."
+              : "Settle arguments with cited rulings — upload a rulebook and roll."}
+          </p>
         </div>
         <div className="header-dice" aria-hidden="true">
           <IconDice className="icon icon-lg" />
         </div>
       </header>
+
+      {demoMode && !fullAccess && (
+        <div className="app-notice" role="status">
+          <div className="notice-banner demo-banner">
+            <div className="notice-banner-copy">
+              <p className="notice-banner-title">Public demo</p>
+              <p>
+                Ask, search, and dispute on the sample game below. Uploads and
+                library edits are disabled on this instance.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {(error || info || uploadHealth || (uploading && uploadProgress)) && (
         <div className="app-notice" role="status">
@@ -1013,6 +1037,7 @@ export default function App() {
             </button>
           </div>
 
+          {fullAccess && (
           <section className="panel-section">
             <h2 className="panel-title">
               <span className="panel-title-icon">
@@ -1106,15 +1131,22 @@ export default function App() {
               </div>
             )}
           </section>
+          )}
 
           <section className="panel-section">
             <h2 className="panel-title">
               <span className="panel-title-icon">
                 <IconLibrary className="icon" />
               </span>
-              Your library
+              {demoMode && !fullAccess ? "Demo library" : "Your library"}
             </h2>
-            {rulebooks.length === 0 && <p className="muted">No rulebooks yet — add one to start.</p>}
+            {rulebooks.length === 0 && (
+              <p className="muted">
+                {demoMode && !fullAccess
+                  ? "Loading sample rulebook…"
+                  : "No rulebooks yet — add one to start."}
+              </p>
+            )}
             <ul className="book-list">
               {displayedRulebooks.map((book) => (
                 <li key={book.id} className={book.id === selectedId ? "active" : ""}>
@@ -1132,6 +1164,7 @@ export default function App() {
                       <span className="book-pages">{book.page_count} pages</span>
                     </span>
                   </button>
+                  {fullAccess && (
                   <button
                     type="button"
                     className={`pin${book.pinned ? " pinned" : ""}`}
@@ -1144,6 +1177,8 @@ export default function App() {
                   >
                     <IconPin className="icon icon-sm" />
                   </button>
+                  )}
+                  {fullAccess && (
                   <button
                     type="button"
                     className="delete"
@@ -1156,6 +1191,7 @@ export default function App() {
                   >
                     ×
                   </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -1177,7 +1213,7 @@ export default function App() {
                 Show less
               </button>
             )}
-            {rulebooks.length > 0 && (
+            {fullAccess && rulebooks.length > 0 && (
               <button
                 type="button"
                 className="book-list-toggle"
@@ -1358,6 +1394,7 @@ export default function App() {
                       >
                         New conversation
                       </button>
+                      {fullAccess && (
                       <button
                         type="button"
                         className="reindex-rulebook"
@@ -1368,6 +1405,8 @@ export default function App() {
                       >
                         {uploading && ingestSource === "reindex" ? "Scanning…" : "Scan again"}
                       </button>
+                      )}
+                      {fullAccess && (
                       <button
                         type="button"
                         className="clear-faq-cache"
@@ -1378,6 +1417,7 @@ export default function App() {
                       >
                         Clear FAQ cache
                       </button>
+                      )}
                     </div>
                   </div>
                 </div>

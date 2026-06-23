@@ -105,7 +105,7 @@ See **[USAGE.md](USAGE.md)** for upload, ask, dispute mode, citations, clarifica
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/api/health` | Health check (`model`, `ocr_fallback_enabled`, `tesseract_installed`, `ocr_available`, `data_dir_writable`) |
-| `GET` | `/api/rulebooks` | List uploaded rulebooks (dedupes legacy copies) |
+| `GET` | `/api/rulebooks` | List uploaded rulebooks |
 | `POST` | `/api/rulebooks` | Upload PDF (`file`, optional `name`). Returns **409** if the same PDF is already in the library |
 | `DELETE` | `/api/rulebooks/{id}` | Remove a rulebook |
 | `GET` | `/api/rulebooks/{id}/examples` | Suggested starter questions for a rulebook |
@@ -132,7 +132,9 @@ Copy `backend/.env.example` to `backend/.env`. Key variables:
 | `OCR_LANGUAGE` | `eng` | Tesseract language code(s) |
 | `OCR_DPI` | `150` | Render resolution for full-page OCR |
 | `OCR_MIN_INDEXABLE_CHARS` | `80` | Try OCR when a page has fewer indexable characters |
-| `API_ACCESS_KEY` | — | When set, all `/api/*` routes (except `/api/health`) require `X-API-Key` or `Authorization: Bearer` |
+| `API_ACCESS_KEY` | — | When set, all `/api/*` routes (except `/api/health` and `/api/config`) require `X-API-Key` or `Authorization: Bearer` |
+| `DEMO_MODE` | `0` | Public demo: read-only access to pre-seeded rulebooks for anonymous users |
+| `PRESEED_DEMO_RULEBOOK` | on when `DEMO_MODE=1` | Load bundled sample PDF at startup |
 | `RATE_LIMIT_ENABLED` | on in production or when `API_ACCESS_KEY` is set | Per-IP rate limits on API routes (`0` to disable) |
 | `RATE_LIMIT_LLM_MAX` | `30` | Max ask/dispute requests per IP per window |
 | `RATE_LIMIT_LLM_WINDOW` | `3600` | LLM rate-limit window in seconds |
@@ -143,7 +145,7 @@ Copy `backend/.env.example` to `backend/.env`. Key variables:
 | `RATE_LIMIT_DEFAULT_MAX` | `300` | Max other API requests per IP per window |
 | `RATE_LIMIT_DEFAULT_WINDOW` | `60` | Default window in seconds |
 
-For public deploys, set `API_ACCESS_KEY` on the backend and `VITE_API_ACCESS_KEY` to the same value when building the frontend (Docker build arg or `frontend/.env.production`). The key is embedded in the static bundle — it keeps casual abuse out, not determined attackers.
+For public deploys, set `API_ACCESS_KEY` on the backend. Share invite links with `?access=YOUR_SECRET`, or set `VITE_API_ACCESS_KEY` at frontend build time so the key is embedded in the bundle.
 
 ## Testing
 
@@ -206,28 +208,40 @@ Repeat questions with no conversation history are answered from a per-rulebook c
 
 ## Deploy
 
-**Backend** (Render, Railway, Fly.io, etc.):
+**Two-instance setup (recommended):** a **public demo** for your portfolio and a **private instance** for full personal use. Full step-by-step guide:
 
-- Root: `backend/` or use the included **Docker** setup
-- Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-- Set `ANTHROPIC_API_KEY`, `CORS_ORIGINS` (your frontend URL), and `API_ACCESS_KEY` for public deploys
-- Build the frontend with the same key: `VITE_API_ACCESS_KEY=$API_ACCESS_KEY npm run build` (Docker: `--build-arg VITE_API_ACCESS_KEY=...`)
-- Attach a persistent volume at `DATA_DIR` so uploads, cache, and ChromaDB survive restarts
+→ **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**
 
-**Frontend** (Vercel, Netlify, Cloudflare Pages):
+Quick reference:
+
+| Instance | `DEMO_MODE` | `API_ACCESS_KEY` | Share via |
+|----------|-------------|------------------|-----------|
+| Portfolio demo | `1` | unset | README link |
+| Personal (you + husband) | `0` | secret | `?access=SECRET` invite link (not in README) |
+
+Templates: [`deploy/demo.env.example`](deploy/demo.env.example), [`deploy/personal.env.example`](deploy/personal.env.example)  
+Render blueprints: [`render.demo.yaml`](render.demo.yaml), [`render.personal.yaml`](render.personal.yaml)
+
+### Local Docker
 
 ```bash
-cd frontend
-VITE_API_URL=https://your-api.example.com npm run build
+# Public demo (sample game pre-loaded)
+cp deploy/demo.env.example deploy/demo.env   # set ANTHROPIC_API_KEY
+docker compose -f docker-compose.demo.yml --env-file deploy/demo.env up --build
+
+# Private full app
+cp deploy/personal.env.example deploy/personal.env
+docker compose -f docker-compose.personal.yml --env-file deploy/personal.env up --build
+# open http://localhost:8000/?access=YOUR_API_ACCESS_KEY
 ```
 
-Deploy the `dist/` folder. Set `VITE_API_URL` to your backend URL at build time.
-
-Or use the included Docker setup for a single-host deploy:
+### Legacy single compose
 
 ```bash
 docker compose up --build
 ```
+
+See [Configuration](#configuration) for all environment variables.
 
 ## Project layout
 

@@ -47,6 +47,7 @@ class Rulebook:
     created_at: str
     content_hash: str = ""
     pinned: bool = False
+    demo: bool = False
 
 
 class RulebookStore:
@@ -63,12 +64,15 @@ class RulebookStore:
         for item in raw:
             item.setdefault("content_hash", "")
             item.setdefault("pinned", False)
+            item.setdefault("demo", False)
             book = Rulebook(**item)
             self._rulebooks[book.id] = book
 
     def _save(self) -> None:
         payload = [asdict(book) for book in self._rulebooks.values()]
-        self._index_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        temp_path = self._index_path.with_suffix(".json.tmp")
+        temp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        temp_path.replace(self._index_path)
 
     def _backfill_content_hashes(self) -> None:
         changed = False
@@ -131,6 +135,7 @@ class RulebookStore:
         page_count: int,
         *,
         content_hash: str,
+        demo: bool = False,
     ) -> Rulebook:
         book = Rulebook(
             id=str(uuid.uuid4()),
@@ -139,6 +144,7 @@ class RulebookStore:
             page_count=page_count,
             created_at=datetime.now(UTC).isoformat(),
             content_hash=content_hash,
+            demo=demo,
         )
         self._rulebooks[book.id] = book
         self._save()

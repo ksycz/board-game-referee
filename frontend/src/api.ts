@@ -1,12 +1,28 @@
+import { getAccessKey } from "./accessKey";
+
 const API = import.meta.env.VITE_API_URL ?? "";
-const API_ACCESS_KEY = import.meta.env.VITE_API_ACCESS_KEY ?? "";
+
+export type AppConfig = {
+  auth_required: boolean;
+  demo_mode: boolean;
+  full_access: boolean;
+};
+
+export async function fetchAppConfig(): Promise<AppConfig> {
+  const res = await fetch(`${API}/api/config`, { headers: apiAuthHeaders() });
+  if (!res.ok) {
+    throw new Error("Failed to load app configuration");
+  }
+  return res.json() as Promise<AppConfig>;
+}
 
 export function apiAuthHeaders(
   extra?: Record<string, string>,
 ): Record<string, string> {
   const headers: Record<string, string> = { ...(extra ?? {}) };
-  if (API_ACCESS_KEY) {
-    headers["X-API-Key"] = API_ACCESS_KEY;
+  const key = getAccessKey();
+  if (key) {
+    headers["X-API-Key"] = key;
   }
   return headers;
 }

@@ -19,6 +19,8 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr("services.rulebook_store.RULEBOOKS_DIR", rulebooks_dir)
     monkeypatch.setattr("config.ANTHROPIC_API_KEY", "")
     monkeypatch.setattr("config.API_ACCESS_KEY", "")
+    monkeypatch.setattr("config.DEMO_MODE", False)
+    monkeypatch.setattr("config.PRESEED_DEMO_RULEBOOK", False)
     monkeypatch.setattr("config.RATE_LIMIT_ENABLED", False)
 
     import main
@@ -32,6 +34,8 @@ def test_health(client):
     assert res.status_code == 200
     body = res.json()
     assert body["status"] == "ok"
+    assert body["auth_required"] is False
+    assert body["demo_mode"] is False
     assert body["model"]
     assert isinstance(body["ocr_fallback_enabled"], bool)
     assert isinstance(body["tesseract_installed"], bool)
@@ -101,6 +105,9 @@ def test_list_dedupes_existing_duplicates(client, sample_pdf):
     (rulebooks_dir / first.filename).write_bytes(pdf_bytes)
     (rulebooks_dir / second.filename).write_bytes(pdf_bytes)
 
+    import main
+
+    main.pipeline.dedupe_rulebooks()
     listed = client.get("/api/rulebooks").json()
     assert len(listed) == 1
     assert listed[0]["id"] == first.id

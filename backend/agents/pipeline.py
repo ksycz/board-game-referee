@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 import uuid
 from collections.abc import Callable
 
@@ -27,6 +28,18 @@ from services.rulebook_store import (
     pdf_content_hash,
 )
 from services.vector_store import VectorStore
+
+_reindex_locks: dict[str, threading.Lock] = {}
+_reindex_locks_guard = threading.Lock()
+
+
+def _reindex_lock(rulebook_id: str) -> threading.Lock:
+    with _reindex_locks_guard:
+        lock = _reindex_locks.get(rulebook_id)
+        if lock is None:
+            lock = threading.Lock()
+            _reindex_locks[rulebook_id] = lock
+        return lock
 
 
 class RefereePipeline:
@@ -327,18 +340,25 @@ class RefereePipeline:
         if not pdf_path.exists():
             raise FileNotFoundError(f"PDF not found for rulebook: {rulebook_id}")
 
-        faq_cache_cleared = self.faq_cache.clear_rulebook(rulebook_id)
-        ingest_result = self.ingestion.ingest(
-            rulebook_id,
-            pdf_path,
-            on_progress=on_progress,
-        )
-        book.page_count = ingest_result["pages_extracted"]
-        self.store._save()
+        lock = _reindex_lock(rulebook_id)
+        if not lock.acquire(blocking=False):
+            raise ValueError("This rulebook is already being re-indexed. Please wait.")
 
-        return {
-            "rulebook": book,
-            "ingestion": ingest_result,
-            "example_questions": self.example_questions(rulebook_id),
-            "faq_cache_cleared": faq_cache_cleared,
-        }
+        try:
+            faq_cache_cleared = self.faq_cache.clear_rulebook(rulebook_id)
+            ingest_result = self.ingestion.ingest(
+                rulebook_id,
+                pdf_path,
+                on_progress=on_progress,
+            )
+            book.page_count = ingest_result["pages_extracted"]
+            self.store._save()
+
+            return {
+                "rulebook": book,
+                "ingestion": ingest_result,
+                "example_questions": self.example_questions(rulebook_id),
+                "faq_cache_cleared": faq_cache_cleared,
+            }
+        finally:
+            lock.release()
