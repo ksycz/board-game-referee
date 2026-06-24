@@ -3,7 +3,6 @@ import {
   BggRulebookFile,
   Rulebook,
   askRulebook,
-  clearFaqCache,
   reindexRulebook,
   searchRulebook,
   deleteRulebook,
@@ -47,7 +46,6 @@ import {
   saveThread,
   trimThread,
   type HistoryExchange,
-  type RecentExchange,
 } from "./conversationStorage";
 import type { AppError, ChatMode, ClarificationContext, Message } from "./app/types";
 import {
@@ -189,14 +187,6 @@ export default function App({
     }));
   }, []);
 
-  const clearSearchState = useCallback(() => {
-    quickSearchSeqRef.current += 1;
-    setQuickSearchQuery("");
-    setQuickSearchHits(null);
-    setQuickSearchLoading(false);
-    setQuickSearchSelected(null);
-  }, []);
-
   const clearConversation = useCallback((rulebookId: string) => {
     updateThread(rulebookId, () => []);
     setClarificationFor(rulebookId, null);
@@ -205,8 +195,22 @@ export default function App({
     setDisputePlayerA("");
     setDisputePlayerB("");
     setError(null);
-    clearSearchState();
-  }, [updateThread, setClarificationFor, clearSearchState]);
+  }, [updateThread, setClarificationFor]);
+
+  const startNewConversation = useCallback((rulebookId: string) => {
+    clearConversation(rulebookId);
+    setChatMode((mode) => (mode === "search" ? "ask" : mode));
+  }, [clearConversation]);
+
+  const focusChatInput = useCallback((mode: ChatMode) => {
+    window.requestAnimationFrame(() => {
+      if (mode === "ask") {
+        inputRef.current?.focus();
+      } else if (mode === "dispute") {
+        disputeSituationRef.current?.focus();
+      }
+    });
+  }, []);
 
   const refresh = useCallback(async () => {
     const books = await listRulebooks();
@@ -349,7 +353,9 @@ export default function App({
 
       if ((event.key === "n" || event.key === "N") && selectedId && !loading) {
         event.preventDefault();
-        clearConversation(selectedId);
+        const nextMode = chatMode === "search" ? "ask" : chatMode;
+        startNewConversation(selectedId);
+        focusChatInput(nextMode);
       }
     };
 
@@ -361,6 +367,7 @@ export default function App({
     clearConversation,
     error,
     effectiveSidebarCollapsed,
+    focusChatInput,
     hideLibraryPanel,
     info,
     isDesktop,
@@ -368,6 +375,7 @@ export default function App({
     loading,
     selectedId,
     setClarificationFor,
+    startNewConversation,
   ]);
 
   useEffect(() => {
@@ -697,27 +705,6 @@ export default function App({
       setRulebooks((current) => sortRulebooks(
         current.map((book) => (book.id === id ? updated : book)),
       ));
-    } catch (err) {
-      setError(toAppError(err));
-    }
-  }
-
-  async function handleClearFaqCache(id: string, name: string) {
-    if (
-      !confirm(
-        `Clear cached answers for "${name}"? Repeat questions will call the referee again.`,
-      )
-    ) {
-      return;
-    }
-    setError(null);
-    try {
-      const cleared = await clearFaqCache(id);
-      setInfo(
-        cleared > 0
-          ? `Cleared ${cleared} cached answer(s) for "${name}".`
-          : `No cached answers to clear for "${name}".`,
-      );
     } catch (err) {
       setError(toAppError(err));
     }
@@ -1308,10 +1295,9 @@ export default function App({
                         className="new-conversation"
                         disabled={loading}
                         onClick={() => {
-                          clearConversation(selected.id);
-                          if (chatMode === "search") {
-                            quickSearchInputRef.current?.focus();
-                          }
+                          const nextMode = chatMode === "search" ? "ask" : chatMode;
+                          startNewConversation(selected.id);
+                          focusChatInput(nextMode);
                         }}
                       >
                         New conversation
@@ -1326,18 +1312,6 @@ export default function App({
                         }}
                       >
                         {uploading && ingestSource === "reindex" ? "Scanning…" : "Scan again"}
-                      </button>
-                      )}
-                      {fullAccess && (
-                      <button
-                        type="button"
-                        className="clear-faq-cache"
-                        disabled={uploading || loading}
-                        onClick={() => {
-                          void handleClearFaqCache(selected.id, selected.name);
-                        }}
-                      >
-                        Clear FAQ cache
                       </button>
                       )}
                     </div>
