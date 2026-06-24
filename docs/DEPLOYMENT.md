@@ -127,7 +127,7 @@ docker compose -f docker-compose.hybrid.yml --env-file deploy/hybrid.env up --bu
 - Citations and page previews
 - UI shows a **Public demo** banner
 
-Cannot: upload, delete, pin, re-index, BGG import, clear FAQ cache.
+Cannot: upload, delete, pin, re-index, BGG import.
 
 ### Family (valid `?access=` or `X-API-Key`)
 

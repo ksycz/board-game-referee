@@ -360,16 +360,6 @@ async def reindex_rulebook_stream(request: Request, rulebook_id: str):
     )
 
 
-@app.delete("/api/rulebooks/{rulebook_id}/faq-cache")
-def clear_faq_cache(request: Request, rulebook_id: str):
-    require_full_access(request)
-    try:
-        cleared = pipeline.clear_faq_cache(rulebook_id)
-    except KeyError:
-        raise HTTPException(status_code=404, detail="Rulebook not found")
-    return {"cleared": cleared}
-
-
 @app.get("/api/rulebooks/{rulebook_id}/pages/{page}/preview")
 def rulebook_page_preview(request: Request, rulebook_id: str, page: int, zoom: float = 1.5):
     require_rulebook_access(request, pipeline.store, rulebook_id)

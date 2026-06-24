@@ -10,9 +10,32 @@ Copyright © 2026 Katarzyna Vaňous. Released under the [MIT License](LICENSE).
 
 **Learning context engineering?** See [docs/CONTEXT_ENGINEERING.md](docs/CONTEXT_ENGINEERING.md) — a reading order, exercises, and file map for this codebase.
 
+## Live demo
+
+**Public (recruiters, README):** [https://board-game-referee.onrender.com](https://board-game-referee.onrender.com)
+
+- Pre-loaded sample game — **Ask**, **Search**, and **Dispute** work without signing in
+- No uploads on the public link (demo is read-only)
+- First load after idle may take ~30–60s (free-tier cold start)
+
+**Family / full access (private bookmark — do not share in README or git):**
+
+```
+https://board-game-referee.onrender.com/?access=YOUR_API_ACCESS_KEY
+```
+
+- Upload rulebooks, pin/delete games, re-scan PDFs
+- Same URL on phone and laptop; chat history stays per browser
+- On the current free Render deploy, uploaded PDFs may not survive a server restart — re-upload if the library is empty
+
+Set `API_ACCESS_KEY` in Render environment variables. Generate one with `openssl rand -hex 32`.
+
+Full deploy options (hybrid, demo-only, persistent disk): **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**
+
 ## Features
 
 - **Ask mode** — plain-English rules questions with cited rulings
+- **Search mode** — keyword search over indexed passages (no LLM call)
 - **Dispute mode** — two players submit their interpretation; referee picks a side (or split/unclear) with per-player assessments
 - **Conversation memory** — follow-up questions per rulebook with context
 - **Clarification flow** — referee asks for missing game state when needed
@@ -20,8 +43,9 @@ Copyright © 2026 Katarzyna Vaňous. Released under the [MIT License](LICENSE).
 - **FAQ cache** — instant repeat answers for identical questions (no LLM call)
 - **Duplicate detection** — same PDF cannot be uploaded twice; legacy duplicates are deduped on list
 - **Hybrid retrieval** — vector + keyword search with query expansion for better passage ranking
-- **Retrieval telemetry** — logs retrieved vs cited pages for tuning
+- **Page previews** — tap a citation to see the PDF page and excerpt
 - **Game name detection** — title extracted from PDF text/metadata when not provided
+- **Hybrid demo deploy** — public sample game + full access via `?access=` on one URL
 
 ## How it works
 
@@ -51,7 +75,7 @@ PDF pages are split by section headings and paragraphs into retrieval-sized chun
 
 - Python 3.11+
 - Node.js 20+
-- An [Anthropic API key](https://console.anthropic.com/)
+- An [Anthropic API key](https://console.anthropic.com/) (not needed for local E2E smoke tests)
 
 ## Local setup
 
@@ -68,7 +92,7 @@ Open http://localhost:5173 — the Vite dev server proxies `/api` to the backend
 If you get `Address already in use`, stop any old servers first:
 
 ```bash
-lsof -ti :8000,:5173 | xargs kill
+lsof -ti :8000 | xargs kill; lsof -ti :5173 | xargs kill
 ```
 
 ### Backend only
@@ -96,23 +120,31 @@ npm run dev
 
 Open http://localhost:5173 — the Vite dev server proxies `/api` to the backend.
 
+### Agent trace (local dev only)
+
+When running `./scripts/dev.sh` or `npm run dev`, each ruling includes a collapsible **Agent trace** with retrieval pages and the full API JSON. This is hidden in production builds — use it for debugging and [context-engineering exercises](docs/CONTEXT_ENGINEERING.md).
+
 ## Using the app
 
-See **[USAGE.md](USAGE.md)** for upload, ask, dispute mode, citations, clarification, follow-ups, and troubleshooting.
+See **[USAGE.md](USAGE.md)** for upload, ask, search, dispute mode, citations, clarification, follow-ups, and troubleshooting.
 
 ## API
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/health` | Health check (`model`, `ocr_fallback_enabled`, `tesseract_installed`, `ocr_available`, `data_dir_writable`) |
-| `GET` | `/api/rulebooks` | List uploaded rulebooks |
-| `POST` | `/api/rulebooks` | Upload PDF (`file`, optional `name`). Returns **409** if the same PDF is already in the library |
+| `GET` | `/api/health` | Health check |
+| `GET` | `/api/config` | `demo_mode`, `full_access`, `auth_required` |
+| `GET` | `/api/rulebooks` | List rulebooks (demo-filtered for anonymous users) |
+| `POST` | `/api/rulebooks/upload-stream` | Upload PDF with progress (SSE) |
 | `DELETE` | `/api/rulebooks/{id}` | Remove a rulebook |
-| `GET` | `/api/rulebooks/{id}/examples` | Suggested starter questions for a rulebook |
-| `POST` | `/api/rulebooks/{id}/ask` | Ask a question (`{"question": "...", "history": [...]}`) |
-| `POST` | `/api/rulebooks/{id}/dispute` | Settle a dispute (`{"situation": "...", "player_a": "...", "player_b": "...", "history": [...]}`) |
+| `POST` | `/api/rulebooks/{id}/reindex-stream` | Re-scan stored PDF |
+| `GET` | `/api/rulebooks/{id}/examples` | Suggested starter questions |
+| `POST` | `/api/rulebooks/{id}/ask` | Ask a question |
+| `POST` | `/api/rulebooks/{id}/dispute` | Settle a dispute |
+| `POST` | `/api/rulebooks/{id}/search` | Quick search (no LLM) |
+| `POST` | `/api/rulebooks/bgg/lookup` | Look up rulebook files on BoardGameGeek |
 
-Ask/dispute responses include `retrieval.metrics` (cited vs retrieved pages) and `cached: true` on FAQ cache hits.
+Ask/dispute responses include `retrieval.metrics` and `cached: true` on FAQ cache hits.
 
 ## Configuration
 
@@ -126,28 +158,19 @@ Copy `backend/.env.example` to `backend/.env`. Key variables:
 | `CHUNK_MAX_CHARS` | `600` | Max chunk size when indexing |
 | `CHUNK_MIN_CHARS` | `100` | Min chunk size before flush |
 | `FAQ_CACHE` | `1` | Cache repeat questions (`0` to disable) |
-| `FAQ_CACHE_MAX_ENTRIES` | `100` | Max cached Q&A per rulebook |
-| `RETRIEVAL_TELEMETRY` | `1` | Log retrieval metrics to JSONL (`0` to disable) |
-| `OCR_FALLBACK` | `0` | OCR sparse PDF pages at upload (`1` to enable; requires [Tesseract](https://github.com/tesseract-ocr/tesseract)) |
-| `OCR_LANGUAGE` | `eng` | Tesseract language code(s) |
-| `OCR_DPI` | `150` | Render resolution for full-page OCR |
-| `OCR_MIN_INDEXABLE_CHARS` | `80` | Try OCR when a page has fewer indexable characters |
-| `API_ACCESS_KEY` | — | When set, all `/api/*` routes (except `/api/health` and `/api/config`) require `X-API-Key` or `Authorization: Bearer` |
-| `DEMO_MODE` | `0` | Public demo: read-only access to pre-seeded rulebooks for anonymous users |
+| `RETRIEVAL_TELEMETRY` | `1` locally | Log retrieval metrics to JSONL (`0` in production deploy) |
+| `OCR_FALLBACK` | `0` | OCR sparse PDF pages at upload (`1` + Tesseract) |
+| `API_ACCESS_KEY` | — | Family access via `?access=` or `X-API-Key` |
+| `DEMO_MODE` | `0` | Public demo: sample game for anonymous users |
 | `PRESEED_DEMO_RULEBOOK` | on when `DEMO_MODE=1` | Load bundled sample PDF at startup |
-| `RATE_LIMIT_ENABLED` | on in production or when `API_ACCESS_KEY` is set | Per-IP rate limits on API routes (`0` to disable) |
-| `RATE_LIMIT_LLM_MAX` | `30` | Max ask/dispute requests per IP per window |
-| `RATE_LIMIT_LLM_WINDOW` | `3600` | LLM rate-limit window in seconds |
-| `RATE_LIMIT_EXPENSIVE_MAX` | `10` | Max upload/reindex/BGG requests per IP per window |
-| `RATE_LIMIT_EXPENSIVE_WINDOW` | `3600` | Expensive-operation window in seconds |
-| `RATE_LIMIT_PREVIEW_MAX` | `120` | Max page-preview requests per IP per window |
-| `RATE_LIMIT_PREVIEW_WINDOW` | `60` | Preview window in seconds |
-| `RATE_LIMIT_DEFAULT_MAX` | `300` | Max other API requests per IP per window |
-| `RATE_LIMIT_DEFAULT_WINDOW` | `60` | Default window in seconds |
+| `CORS_ORIGINS` | `http://localhost:5173` | Allowed frontend origin(s), comma-separated |
+| `RATE_LIMIT_*` | see `.env.example` | Per-IP rate limits |
 
-For public deploys, set `API_ACCESS_KEY` and `DEMO_MODE=1` on the same instance. Share family links with `?access=YOUR_SECRET`; keep the plain URL in the README for recruiters. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+For cloud hybrid deploy: `DEMO_MODE=1`, `API_ACCESS_KEY` set, `CORS_ORIGINS` = your Render/Fly URL. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Testing
+
+### Backend
 
 ```bash
 cd backend
@@ -155,9 +178,17 @@ source .venv/bin/activate
 pytest
 ```
 
+### Frontend
+
+```bash
+cd frontend
+npm run lint
+npm run build
+```
+
 ### E2E smoke test (Playwright)
 
-Uploads the sample rulebook PDF, asks a question, and asserts a citation appears. Uses a stub referee (`E2E_STUB_LLM=1`) — no Anthropic API key required.
+Uploads the sample rulebook, asks a question, and asserts a citation appears. Uses a stub referee (`E2E_STUB_LLM=1`) — no Anthropic API key required.
 
 ```bash
 cd backend/tests/fixtures
@@ -168,86 +199,65 @@ npm install
 npm run test:e2e
 ```
 
-Playwright starts the backend (`scripts/e2e-backend.sh`) and Vite dev server automatically.
+### CI (GitHub Actions)
+
+Every push to `main` runs two workflows:
+
+| Workflow | What it checks |
+|----------|----------------|
+| **CI** | Backend `pytest` + frontend lint/build |
+| **E2E** | Playwright smoke test |
 
 ## Pre-commit
-
-Git hooks run **Ruff** (lint + format) on the backend and **ESLint** on the frontend before each commit:
 
 ```bash
 pip install -r backend/requirements-dev.txt
 pre-commit install
-```
-
-Run all hooks manually:
-
-```bash
 pre-commit run --all-files
 ```
 
-### Retrieval telemetry
-
-Each ask/dispute logs retrieval metrics to `data/retrieval_telemetry.jsonl` (retrieved vs cited pages, citation pass rate). Adjust `TOP_K_CHUNKS`, `CHUNK_MAX_CHARS`, and `CHUNK_MIN_CHARS` in `.env` based on what you see in the agent trace and telemetry log.
-
-### FAQ cache
-
-Repeat questions with no conversation history are answered from a per-rulebook cache (`data/faq_cache/`) — no LLM call. Set `FAQ_CACHE=0` to disable.
-
 ## Deploy
-
-**Recommended:** one cloud deploy with a **persistent disk** — public demo for recruiters + full access for you and family via `?access=SECRET`, works across devices.
-
-→ **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** (step-by-step Fly.io / Render)
 
 | Link | Who | What |
 |------|-----|------|
-| `https://your-app.example.com` | Recruiters (README) | Sample game, ask / search / dispute |
-| `https://your-app.example.com/?access=SECRET` | You, family (bookmark, not in README) | Upload rulebooks, shared library on all devices |
+| [board-game-referee.onrender.com](https://board-game-referee.onrender.com) | Public | Sample game — ask / search / dispute |
+| `…?access=SECRET` (bookmark) | Family | Upload rulebooks, full app |
 
-Template: [`deploy/hybrid.env.example`](deploy/hybrid.env.example) · Blueprint: [`render.yaml`](render.yaml)
+**Templates:** [`deploy/hybrid.env.example`](deploy/hybrid.env.example) · [`render.yaml`](render.yaml)
+
+**Local Docker (hybrid):**
 
 ```bash
 cp deploy/hybrid.env.example deploy/hybrid.env   # set keys
 docker compose -f docker-compose.hybrid.yml --env-file deploy/hybrid.env up --build
 ```
 
-**Local dev** (no cloud): `./scripts/dev.sh` — data in `backend/data/`.
+- Public demo: http://localhost:8000
+- Full access: http://localhost:8000/?access=YOUR_API_ACCESS_KEY
 
-Alternatives (demo-only, personal-only, two deploys): see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#alternative-setups).
+Step-by-step Render / Fly.io guide: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**
 
 ## Project layout
 
 ```
 board-game-referee/
 ├── backend/
-│   ├── agents/
-│   │   ├── ingestion_agent.py
-│   │   ├── retrieval_agent.py
-│   │   ├── referee_agent.py
-│   │   ├── citation_agent.py
-│   │   └── pipeline.py          # connects all agents
-│   ├── services/
-│   │   ├── pdf_parser.py
-│   │   ├── vector_store.py      # hybrid retrieval
-│   │   ├── rulebook_store.py
-│   │   ├── faq_cache.py
-│   │   └── retrieval_telemetry.py
+│   ├── agents/          # ingestion, retrieval, referee, citation, pipeline
+│   ├── services/        # PDF, vector store, FAQ cache, demo mode, …
 │   └── main.py
 ├── frontend/
 │   └── src/
-│       ├── App.tsx
-│       ├── app/                 # types + sidebar helpers
-│       ├── components/          # extracted UI panels
-│       ├── api.ts
-│       └── Icons.tsx
-└── scripts/
-    └── dev.sh
+│       ├── App.tsx      # main UI orchestration
+│       ├── app/         # types + helpers
+│       ├── components/  # referee answer, search, notices, …
+│       └── api.ts
+├── .github/workflows/   # CI + E2E
+├── deploy/              # env templates
+└── scripts/dev.sh
 ```
 
 ## Ideas to try next
 
-- Clickable citations — jump to source excerpts in a drawer or modal
 - Multi-rulebook search — "Which of my games allows this?"
-- CI with GitHub Actions
-- Mobile-friendly layout for use at the table
-- Swap ChromaDB for a hosted vector DB when you deploy at scale
+- Persistent disk on Render for family uploads that survive restarts
+- Swap ChromaDB for a hosted vector DB at scale

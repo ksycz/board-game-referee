@@ -1,5 +1,9 @@
 import { IconClose } from "../Icons";
-import { CONTEXT_ENGINEERING_PDF_GUIDE_URL, formatThinPagesLabel, type RulebookHealthSummary } from "../api";
+import {
+  CONTEXT_ENGINEERING_PDF_GUIDE_URL,
+  formatRulebookHealthCopy,
+  type RulebookHealthSummary,
+} from "../api";
 import type { AppError } from "../app/types";
 
 export function RulebookHealthNotice({
@@ -9,11 +13,8 @@ export function RulebookHealthNotice({
   health: RulebookHealthSummary;
   onDismiss: () => void;
 }) {
-  const needsHelp = health.thinPages.length > 0 || !!health.ocrWarning;
-  const thinLabel = formatThinPagesLabel(health.thinPages);
-  const ocrLabel = health.ocrPages === 1
-    ? "1 page scanned (OCR)"
-    : `${health.ocrPages} pages scanned (OCR)`;
+  const copy = formatRulebookHealthCopy(health);
+  const needsHelp = copy.cautions.length > 0;
 
   return (
     <div
@@ -21,24 +22,19 @@ export function RulebookHealthNotice({
       role="status"
     >
       <div className="notice-banner-copy">
-        <p className="notice-banner-title">{health.name} indexed</p>
-        <ul className="rulebook-health-list">
-          <li>
-            {health.pagesIndexed} of {health.totalPages} pages indexed · {health.chunksIndexed} passages
-          </li>
-          {health.ocrPages > 0 && <li>{ocrLabel}</li>}
-          {health.thinPages.length > 0 && (
-            <li>
-              {health.thinPages.length} thin page{health.thinPages.length === 1 ? "" : "s"}
-              {thinLabel ? ` (${thinLabel})` : ""} — may answer poorly there
-            </li>
-          )}
-        </ul>
-        {health.ocrWarning && <p className="notice-banner-hint">{health.ocrWarning}</p>}
+        <p className="notice-banner-title">{copy.title}</p>
+        <p className="notice-banner-hint">{copy.summary}</p>
+        {copy.cautions.length > 0 && (
+          <ul className="rulebook-health-list">
+            {copy.cautions.map((caution) => (
+              <li key={caution}>{caution}</li>
+            ))}
+          </ul>
+        )}
         {needsHelp && (
           <p className="notice-banner-hint">
             <a href={CONTEXT_ENGINEERING_PDF_GUIDE_URL} target="_blank" rel="noreferrer">
-              Troubleshooting graphical PDFs
+              Tips for graphical PDFs
             </a>
           </p>
         )}

@@ -89,12 +89,14 @@ export function RefereeAnswer({
         </div>
       )}
 
-      <details>
-        <summary>
-          Agent trace ({data.retrieval.chunks_found} passages from pages {data.retrieval.pages.join(", ")})
-        </summary>
-        <pre>{JSON.stringify(data, null, 2)}</pre>
-      </details>
+      {import.meta.env.DEV && (
+        <details>
+          <summary>
+            Agent trace ({data.retrieval.chunks_found} passages from pages {data.retrieval.pages.join(", ")})
+          </summary>
+          <pre>{JSON.stringify(data, null, 2)}</pre>
+        </details>
+      )}
     </div>
   );
 }

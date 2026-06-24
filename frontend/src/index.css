@@ -1054,8 +1054,7 @@ body::after {
 }
 
 .new-conversation,
-.reindex-rulebook,
-.clear-faq-cache {
+.reindex-rulebook {
   flex-shrink: 0;
   padding: 0.4rem 0.75rem;
   border: 1px solid var(--border);
@@ -1069,8 +1068,7 @@ body::after {
 }
 
 .new-conversation:hover,
-.reindex-rulebook:hover,
-.clear-faq-cache:hover {
+.reindex-rulebook:hover {
   background: var(--surface-muted);
   border-color: var(--border-gold);
   color: var(--ink);
@@ -2547,8 +2545,7 @@ details pre {
   }
 
   .app-active .new-conversation,
-  .app-active .reindex-rulebook,
-  .app-active .clear-faq-cache {
+  .app-active .reindex-rulebook {
     min-height: 2.5rem;
     padding: 0.45rem 0.7rem;
     font-size: 0.76rem;
@@ -2758,8 +2755,7 @@ details pre {
   }
 
   .new-conversation,
-  .reindex-rulebook,
-  .clear-faq-cache {
+  .reindex-rulebook {
     min-height: 2.75rem;
     padding: 0.55rem 1rem;
     font-size: 0.85rem;

@@ -291,10 +291,66 @@ export function formatThinPagesLabel(pages: number[]): string {
     return "";
   }
   if (pages.length <= 6) {
-    return `pages ${pages.join(", ")}`;
+    return pages.map((page) => `p. ${page}`).join(", ");
   }
-  const preview = pages.slice(0, 5).join(", ");
-  return `pages ${preview}, … (+${pages.length - 5} more)`;
+  const preview = pages.slice(0, 5).map((page) => `p. ${page}`).join(", ");
+  return `${preview}, … (+${pages.length - 5} more)`;
+}
+
+export type RulebookHealthCopy = {
+  title: string;
+  summary: string;
+  cautions: string[];
+};
+
+export function formatRulebookHealthCopy(health: RulebookHealthSummary): RulebookHealthCopy {
+  const {
+    name,
+    totalPages,
+    pagesIndexed,
+    ocrPages,
+    thinPages,
+    ocrWarning,
+  } = health;
+
+  const allPagesRead = pagesIndexed >= totalPages;
+  const hasCautions = thinPages.length > 0 || !!ocrWarning || !allPagesRead || ocrPages > 0;
+
+  const title = hasCautions ? `${name} is ready — a few notes` : `${name} is ready`;
+
+  let summary: string;
+  if (totalPages === 1) {
+    summary = "We read the rulebook — ask a rules question below.";
+  } else if (allPagesRead) {
+    summary = `We read all ${totalPages} pages — ask a rules question below.`;
+  } else {
+    summary = `We read ${pagesIndexed} of ${totalPages} pages. Blank or picture-only pages are skipped.`;
+  }
+
+  const cautions: string[] = [];
+
+  if (ocrWarning) {
+    cautions.push(ocrWarning);
+  } else if (ocrPages === 1) {
+    cautions.push("One page was mostly graphics, so we scanned it to pull out the rules text.");
+  } else if (ocrPages > 1) {
+    cautions.push(
+      `We scanned ${ocrPages} pages that were mostly graphics to pull out the rules text.`,
+    );
+  }
+
+  if (thinPages.length === 1) {
+    cautions.push(
+      `Page ${thinPages[0]} had very little readable text — answers about that page may be weaker.`,
+    );
+  } else if (thinPages.length > 1) {
+    const label = formatThinPagesLabel(thinPages);
+    cautions.push(
+      `${thinPages.length} pages had very little readable text (${label}) — answers there may be weaker.`,
+    );
+  }
+
+  return { title, summary, cautions };
 }
 
 export type UploadResponse = {
@@ -684,19 +740,6 @@ export async function fetchRulebookPagePreviewBlob(
   }
   const blob = await res.blob();
   return URL.createObjectURL(blob);
-}
-
-export async function clearFaqCache(rulebookId: string): Promise<number> {
-  const res = await fetch(`${API}/api/rulebooks/${rulebookId}/faq-cache`, {
-    method: "DELETE",
-    headers: apiAuthHeaders(),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(parseErrorDetail(err.detail) ?? "Could not clear FAQ cache");
-  }
-  const payload = await res.json();
-  return typeof payload.cleared === "number" ? payload.cleared : 0;
 }
 
 export async function reindexRulebook(
