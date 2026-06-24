@@ -30,7 +30,6 @@ from services.frontend_static import resolve_frontend_asset
 from services.http_errors import GENERIC_BGG_LOOKUP_ERROR, server_error
 from services.pdf_parser import ensure_tesseract_path
 from services.bgg_fetch import BggError, lookup_rulebooks
-from services.bgg_upload_stream import stream_bgg_rulebook_upload
 from services.rulebook_store import DuplicateRulebookError
 from services.reindex_stream import stream_rulebook_reindex
 from services.upload_stream import stream_rulebook_upload
@@ -175,13 +174,6 @@ class BggLookupRequest(BaseModel):
     url: str = Field(min_length=8, max_length=500)
 
 
-class BggImportRequest(BaseModel):
-    file_id: str = Field(min_length=1, max_length=32, pattern=r"^\d+$")
-    filename: str | None = Field(default=None, max_length=255)
-    name: str | None = Field(default=None, max_length=120)
-    bgg_url: str | None = Field(default=None, max_length=500)
-
-
 def _safe_filename(name: str) -> str:
     return safe_stored_filename(name)
 
@@ -240,28 +232,6 @@ def bgg_lookup(request: Request, body: BggLookupRequest):
     except Exception as exc:
         logger.exception("BGG lookup failed")
         raise HTTPException(status_code=400, detail=GENERIC_BGG_LOOKUP_ERROR) from exc
-
-
-@app.post("/api/rulebooks/bgg/upload-stream")
-async def bgg_upload_stream(request: Request, body: BggImportRequest):
-    require_full_access(request)
-    display_name = (body.name or "").strip() or None
-    filename_hint = (body.filename or "").strip() or None
-    bgg_url = (body.bgg_url or "").strip() or None
-    return StreamingResponse(
-        stream_bgg_rulebook_upload(
-            pipeline,
-            file_id=body.file_id.strip(),
-            filename_hint=filename_hint,
-            display_name=display_name,
-            bgg_url=bgg_url,
-        ),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        },
-    )
 
 
 @app.get("/api/config")

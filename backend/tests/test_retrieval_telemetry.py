@@ -1,8 +1,7 @@
-"""Tests for retrieval telemetry metrics and benchmark helpers."""
+"""Tests for retrieval telemetry metrics."""
 
 import json
 
-from services.retrieval_benchmark import SAMPLE_RULEBOOK_CASES
 from services.retrieval_telemetry import (
     cited_pages,
     compute_confidence_hint,
@@ -162,9 +161,3 @@ def test_summarize_telemetry_log(tmp_path):
     assert summary["avg_citation_pass_rate"] == 0.75
     assert summary["citations_missing_from_retrieval"] == 1
     assert summary["all_valid_rate"] == 0.5
-
-
-def test_sample_benchmark_cases_cover_follow_up():
-    assert any(case.history for case in SAMPLE_RULEBOOK_CASES)
-    follow_up = next(case for case in SAMPLE_RULEBOOK_CASES if case.name == "follow_up_first_turn")
-    assert "first turn" in follow_up.search_query().lower()

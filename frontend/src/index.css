@@ -2397,6 +2397,10 @@ details pre {
   padding: 0.65rem 0.9rem 0.6rem;
 }
 
+.app-active .chat-header-row {
+  align-items: center;
+}
+
 .app-active .chat-header h2 {
   font-size: 1.2rem;
 }
@@ -2495,6 +2499,11 @@ details pre {
 
   .app-active .mobile-game-bar {
     padding: 0.5rem 0.75rem;
+    align-items: center;
+  }
+
+  .app-active .mobile-game-meta {
+    justify-content: center;
   }
 
   .app-active .chat-header {

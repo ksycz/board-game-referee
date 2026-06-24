@@ -497,18 +497,6 @@ export type BggLookupResponse = {
   files: BggRulebookFile[];
 };
 
-export class BggImportError extends Error {
-  readonly bggUrl?: string;
-  readonly code?: string;
-
-  constructor(message: string, options?: { bggUrl?: string; code?: string }) {
-    super(message);
-    this.name = "BggImportError";
-    this.bggUrl = options?.bggUrl;
-    this.code = options?.code;
-  }
-}
-
 export function formatFileSize(bytes: number): string {
   if (bytes < 1024) {
     return `${bytes} B`;
@@ -529,48 +517,6 @@ export async function lookupBggRulebooks(url: string): Promise<BggLookupResponse
     await throwIfNotOk(res, "Could not look up that BoardGameGeek link");
   }
   return res.json();
-}
-
-export async function uploadBggRulebook(
-  file: BggRulebookFile,
-  name?: string,
-  onProgress?: (progress: UploadProgress) => void,
-): Promise<UploadResponse> {
-  const res = await fetch(`${API}/api/rulebooks/bgg/upload-stream`, {
-    method: "POST",
-    headers: apiAuthHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({
-      file_id: file.file_id,
-      filename: file.filename,
-      name,
-      bgg_url: file.bgg_url,
-    }),
-  });
-  if (!res.ok) {
-    await throwIfNotOk(res, "BGG import failed");
-  }
-  if (!res.body) {
-    throw new Error("BGG import failed — no response from server.");
-  }
-
-  const result = await readUploadStream(res.body, onProgress);
-  if (result.type === "complete") {
-    return result.data;
-  }
-  if (result.type === "duplicate") {
-    throw new DuplicateRulebookError(
-      result.message,
-      result.rulebook,
-      result.example_questions,
-    );
-  }
-  if (result.type === "error") {
-    throw new BggImportError(result.message, {
-      bggUrl: result.bgg_url,
-      code: result.code,
-    });
-  }
-  throw new Error("BGG import failed.");
 }
 
 export async function listRulebooks(): Promise<Rulebook[]> {

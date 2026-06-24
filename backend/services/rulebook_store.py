@@ -13,9 +13,10 @@ from pathlib import Path
 from config import RULEBOOKS_DIR, ensure_dirs
 from services.upload_utils import safe_stored_filename
 from services.game_name import (
-    extract_game_name_from_pdf,
+    derive_game_name,
+    is_plausible_game_title,
     looks_like_filename,
-    prettify_filename_stem,
+    original_filename_from_stored,
 )
 
 
@@ -107,17 +108,18 @@ class RulebookStore:
         with self._lock:
             changed = False
             for book in self._rulebooks.values():
-                if not looks_like_filename(book.name):
-                    continue
-                pdf_path = resolve_rulebook_pdf_path(book.filename)
-                if not pdf_path.exists():
-                    continue
-                resolved = extract_game_name_from_pdf(pdf_path)
-                if not resolved:
-                    resolved = prettify_filename_stem(book.name)
-                if resolved and resolved != book.name:
-                    book.name = resolved
-                    changed = True
+                if looks_like_filename(book.name) or not is_plausible_game_title(book.name):
+                    pdf_path = resolve_rulebook_pdf_path(book.filename)
+                    if not pdf_path.exists():
+                        continue
+                    resolved = derive_game_name(
+                        pdf_path,
+                        original_filename_from_stored(book.filename),
+                        None,
+                    )
+                    if resolved and resolved != book.name:
+                        book.name = resolved
+                        changed = True
             if changed:
                 self._save_unlocked()
             return sorted(

@@ -100,7 +100,7 @@ You may not attack on the first turn.
 |-------|----------------------|
 | Chunking, retrieval, prompts, history | Yes — core |
 | Citation validation | Yes — feedback loop |
-| Retrieval telemetry + `tune_retrieval.py` | Yes — experimentation |
+| Retrieval telemetry | Yes — experimentation |
 | FAQ cache | No — cost/latency optimization |
 | Duplicate PDF detection | No — product logic |
 
@@ -122,27 +122,11 @@ You may not attack on the first turn.
 
 **Lesson:** If the right page drops out of top-k, answers degrade.
 
-### Exercise C — Tune without API cost
+### Exercise C — Inspect telemetry
 
-```bash
-cd backend
-python scripts/tune_retrieval.py
-```
+Ask several questions in the app, then read `backend/data/retrieval_telemetry.jsonl`. Low `citation_recall` → increase top-k or fix chunking. Low `citation_pass_rate` → retrieval or prompt issue.
 
-Sweeps chunk size and top-k against benchmark questions on the sample PDF.
-
-### Exercise D — Summarize live quality
-
-Ask several questions in the app, then:
-
-```bash
-cd backend
-python scripts/tune_retrieval.py --summarize-log
-```
-
-Low `citation_recall` → increase top-k or fix chunking. Low `citation_pass_rate` → retrieval or prompt issue.
-
-### Exercise E — Prompt edit
+### Exercise D — Prompt edit
 
 Change one line in `SYSTEM_PROMPT` (e.g. prefer the stricter reading when ambiguous). Restart, test edge cases, compare citations.
 
@@ -153,9 +137,9 @@ Change one line in `SYSTEM_PROMPT` (e.g. prefer the stricter reading when ambigu
 | Step | Action | Learn |
 |------|--------|-------|
 | 1 | Agent trace + `pipeline.py` | End-to-end flow |
-| 2 | `tune_retrieval.py` + `TOP_K_CHUNKS` | Retrieval vs answer quality |
+| 2 | `TOP_K_CHUNKS` env + agent trace | Retrieval vs answer quality |
 | 3 | Edit `SYSTEM_PROMPT` | Prompt design |
-| 4 | Add a case to `retrieval_benchmark.py` + test | Measuring retrieval |
+| 4 | `test_retrieval_telemetry.py` | Measuring retrieval |
 
 ---
 

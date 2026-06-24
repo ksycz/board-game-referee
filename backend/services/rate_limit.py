@@ -73,7 +73,6 @@ def rate_limit_rule_for_request(path: str, method: str) -> RateLimitRule | None:
     if method == "POST" and (
         path in ("/api/rulebooks", "/api/rulebooks/upload-stream")
         or path.endswith("/reindex-stream")
-        or path.endswith("/bgg/upload-stream")
         or path.endswith("/bgg/lookup")
     ):
         return RateLimitRule(

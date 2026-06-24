@@ -45,7 +45,7 @@ flowchart LR
 | **Referee** | Reason over passages and produce a ruling + citations |
 | **Citation** | Verify cited pages/quotes match retrieved source text |
 
-PDF pages are split by section headings and paragraphs into retrieval-sized chunks (page numbers preserved), embedded with ChromaDB's default model, and only the top-k chunks go to the LLM. Tune chunk size and top-k via environment variables or `scripts/tune_retrieval.py`.
+PDF pages are split by section headings and paragraphs into retrieval-sized chunks (page numbers preserved), embedded with ChromaDB's default model, and only the top-k chunks go to the LLM. Tune chunk size and top-k via `TOP_K_CHUNKS`, `CHUNK_MAX_CHARS`, and `CHUNK_MIN_CHARS` in `backend/.env`.
 
 ## Prerequisites
 
@@ -185,22 +185,9 @@ Run all hooks manually:
 pre-commit run --all-files
 ```
 
-### Tune retrieval
+### Retrieval telemetry
 
-Each ask/dispute logs retrieval metrics to `data/retrieval_telemetry.jsonl` (retrieved vs cited pages, citation pass rate). Summarize live usage:
-
-```bash
-cd backend
-python scripts/tune_retrieval.py --summarize-log
-```
-
-Sweep chunk size and top-k against the sample rulebook benchmark (no API key needed):
-
-```bash
-python scripts/tune_retrieval.py
-```
-
-Override `TOP_K_CHUNKS`, `CHUNK_MAX_CHARS`, and `CHUNK_MIN_CHARS` based on the best row.
+Each ask/dispute logs retrieval metrics to `data/retrieval_telemetry.jsonl` (retrieved vs cited pages, citation pass rate). Adjust `TOP_K_CHUNKS`, `CHUNK_MAX_CHARS`, and `CHUNK_MIN_CHARS` in `.env` based on what you see in the agent trace and telemetry log.
 
 ### FAQ cache
 
@@ -244,14 +231,13 @@ board-game-referee/
 │   │   ├── vector_store.py      # hybrid retrieval
 │   │   ├── rulebook_store.py
 │   │   ├── faq_cache.py
-│   │   ├── retrieval_telemetry.py
-│   │   └── retrieval_benchmark.py
-│   ├── scripts/
-│   │   └── tune_retrieval.py
+│   │   └── retrieval_telemetry.py
 │   └── main.py
 ├── frontend/
 │   └── src/
 │       ├── App.tsx
+│       ├── app/                 # types + sidebar helpers
+│       ├── components/          # extracted UI panels
 │       ├── api.ts
 │       └── Icons.tsx
 └── scripts/
