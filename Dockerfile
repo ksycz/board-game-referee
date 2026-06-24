@@ -3,8 +3,13 @@ WORKDIR /app/frontend
 COPY frontend/package*.json ./
 RUN npm install
 COPY frontend/ ./
+# Hybrid deploy: VITE_DEMO_MODE=1 (default) lets the SPA fail open to demo if /api/config is briefly unreachable.
+# Personal-only Docker builds: docker build --build-arg VITE_DEMO_MODE=0 .
+# Do not set VITE_API_ACCESS_KEY in production images — use ?access= at runtime instead.
+ARG VITE_DEMO_MODE=1
 ARG VITE_API_ACCESS_KEY=
 ENV VITE_API_URL=
+ENV VITE_DEMO_MODE=$VITE_DEMO_MODE
 ENV VITE_API_ACCESS_KEY=$VITE_API_ACCESS_KEY
 RUN npm run build
 

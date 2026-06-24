@@ -47,6 +47,8 @@ Copy [`deploy/hybrid.env.example`](../deploy/hybrid.env.example) → `deploy/hyb
 | `RETRIEVAL_TELEMETRY` | `0` |
 | `RULING_FEEDBACK` | `0` |
 
+**Docker frontend build (hybrid):** the Dockerfile defaults `VITE_DEMO_MODE=1` so the bundled SPA treats a brief `/api/config` failure as public demo (not the access gate). Personal-only images: `docker build --build-arg VITE_DEMO_MODE=0 .`. Do **not** bake `VITE_API_ACCESS_KEY` into the image — family access uses `?access=` at runtime.
+
 Set a **monthly spending limit** on your Anthropic key in the [Anthropic console](https://console.anthropic.com).
 
 ### Deploy on Fly.io (recommended — persistent volume)
@@ -167,6 +169,7 @@ Requests with a valid API key bypass demo restrictions on the same instance.
 ## Checklist (recommended hybrid deploy)
 
 - [ ] `DEMO_MODE=1`, `API_ACCESS_KEY` set, `PRESEED_DEMO_RULEBOOK=1`
+- [ ] Docker image built with `VITE_DEMO_MODE=1` (Dockerfile default; hybrid `docker compose` passes it)
 - [ ] Persistent volume on `/data` (not ephemeral-only hosting)
 - [ ] `CORS_ORIGINS` matches your public URL exactly
 - [ ] Anthropic monthly spend cap set
