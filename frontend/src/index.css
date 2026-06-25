@@ -911,7 +911,6 @@ body::after {
   flex: 0 0 auto;
   min-height: 0;
   padding: 0;
-  overflow: hidden;
 }
 
 .chat-dispute-idle .chat-composer {

@@ -1,5 +1,5 @@
-import { ApiError, type HistoryMessage, type Rulebook } from "../api";
-import type { RecentExchange } from "../conversationStorage";
+import { ApiError, type AskResponse, type HistoryMessage, type Rulebook } from "../api";
+import { trimThread, type RecentExchange } from "../conversationStorage";
 import type { AppError, Message } from "./types";
 
 export function toAppError(err: unknown): AppError {
@@ -15,6 +15,33 @@ export function toAppError(err: unknown): AppError {
     }
   }
   return { message: err instanceof Error ? err.message : String(err) };
+}
+
+function matchesPromptMessage(left: Message, right: Message): boolean {
+  if (left.role !== right.role) {
+    return false;
+  }
+  if (left.role === "user" && right.role === "user") {
+    return left.text === right.text;
+  }
+  if (left.role === "dispute" && right.role === "dispute") {
+    return (
+      left.situation === right.situation
+      && left.playerA === right.playerA
+      && left.playerB === right.playerB
+    );
+  }
+  return false;
+}
+
+export function appendRulingToThread(
+  existing: Message[],
+  prompt: Extract<Message, { role: "user" } | { role: "dispute" }>,
+  answer: AskResponse,
+): Message[] {
+  const last = existing[existing.length - 1];
+  const withPrompt = last && matchesPromptMessage(last, prompt) ? existing : [...existing, prompt];
+  return trimThread([...withPrompt, { role: "referee", data: answer }]);
 }
 
 export function buildHistory(messages: Message[]): HistoryMessage[] {

@@ -18,7 +18,8 @@ export function RefereeAnswer({
   data: AskResponse;
   overlayDismissTick: number;
 }) {
-  const { ruling, citation_check } = data;
+  const { ruling } = data;
+  const citation_check = data.citation_check ?? { all_valid: true, issues: [], citations: [] };
   const needsInput = ruling.needs_clarification && ruling.clarification_question;
   const isDispute = data.mode === "dispute";
   const confidenceHint = data.confidence_hint;
@@ -250,7 +251,8 @@ function CitationsList({
   rulebookId: string;
   data: AskResponse;
 }) {
-  const { ruling, citation_check } = data;
+  const { ruling } = data;
+  const citation_check = data.citation_check ?? { all_valid: true, issues: [], citations: [] };
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
   const selected = selectedIndex !== null ? citation_check.citations[selectedIndex] : null;

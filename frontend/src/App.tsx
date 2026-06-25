@@ -20,6 +20,7 @@ import {
   type UploadProgress,
   type RulebookHealthSummary,
   type SearchHit,
+  type AskResponse,
 } from "./api";
 import {
   IconBook,
@@ -51,6 +52,7 @@ import type { AppError, ChatMode, ClarificationContext, Message } from "./app/ty
 import {
   DESKTOP_LAYOUT_QUERY,
   SIDEBAR_LIST_PREVIEW_LIMIT,
+  appendRulingToThread,
   buildHistory,
   isEditableTarget,
   loadSidebarCollapsed,
@@ -575,6 +577,21 @@ export default function App({
     }
   }
 
+  function commitRuling(
+    rulebookId: string,
+    prompt: Extract<Message, { role: "user" } | { role: "dispute" }>,
+    answer: AskResponse,
+  ): Message[] {
+    let threadWithRuling: Message[] = [];
+    setThreads((current) => {
+      const existing = current[rulebookId] ?? [];
+      threadWithRuling = appendRulingToThread(existing, prompt, answer);
+      saveThread(rulebookId, threadWithRuling);
+      return { ...current, [rulebookId]: threadWithRuling };
+    });
+    return threadWithRuling;
+  }
+
   async function submitQuestion(reply: string) {
     if (!selectedId || !reply.trim() || loadingRef.current) {
       return;
@@ -584,7 +601,8 @@ export default function App({
     const trimmed = reply.trim();
     const priorMessages = threads[requestRulebookId] ?? [];
     const history = buildHistory(priorMessages);
-    updateThread(requestRulebookId, (current) => [...current, { role: "user", text: trimmed }]);
+    const userMessage = { role: "user" as const, text: trimmed };
+    updateThread(requestRulebookId, (current) => [...current, userMessage]);
 
     loadingRef.current = true;
     activeRequestRulebookRef.current = requestRulebookId;
@@ -603,19 +621,11 @@ export default function App({
       } else {
         setClarificationFor(requestRulebookId, null);
       }
-      const threadWithRuling = trimThread([
-        ...priorMessages,
-        { role: "user", text: trimmed },
-        { role: "referee", data: answer },
-      ]);
-      setThreads((current) => ({
-        ...current,
-        [requestRulebookId]: threadWithRuling,
-      }));
+      const threadWithRuling = commitRuling(requestRulebookId, userMessage, answer);
       persistThreadAndHistory(requestRulebookId, threadWithRuling);
+      setQuestion("");
     } catch (err) {
       if (activeRequestRulebookRef.current === requestRulebookId) {
-        updateThread(requestRulebookId, () => priorMessages);
         setError(toAppError(err));
       }
     } finally {
@@ -646,16 +656,10 @@ export default function App({
     const playerB = disputePlayerB.trim();
     if (!situation || !playerA || !playerB) return;
 
-    setDisputeSituation("");
-    setDisputePlayerA("");
-    setDisputePlayerB("");
-
     const priorMessages = threads[requestRulebookId] ?? [];
     const history = buildHistory(priorMessages);
-    updateThread(requestRulebookId, (current) => [
-      ...current,
-      { role: "dispute", situation, playerA, playerB },
-    ]);
+    const disputeMessage = { role: "dispute" as const, situation, playerA, playerB };
+    updateThread(requestRulebookId, (current) => [...current, disputeMessage]);
 
     loadingRef.current = true;
     activeRequestRulebookRef.current = requestRulebookId;
@@ -674,19 +678,13 @@ export default function App({
       } else {
         setClarificationFor(requestRulebookId, null);
       }
-      const threadWithRuling = trimThread([
-        ...priorMessages,
-        { role: "dispute", situation, playerA, playerB },
-        { role: "referee", data: answer },
-      ]);
-      setThreads((current) => ({
-        ...current,
-        [requestRulebookId]: threadWithRuling,
-      }));
+      const threadWithRuling = commitRuling(requestRulebookId, disputeMessage, answer);
       persistThreadAndHistory(requestRulebookId, threadWithRuling);
+      setDisputeSituation("");
+      setDisputePlayerA("");
+      setDisputePlayerB("");
     } catch (err) {
       if (activeRequestRulebookRef.current === requestRulebookId) {
-        updateThread(requestRulebookId, () => priorMessages);
         setError(toAppError(err));
       }
     } finally {
@@ -1204,7 +1202,9 @@ export default function App({
 
         <main
           className={`chat panel${
-            selected && chatMode === "dispute" && messages.length === 0 ? " chat-dispute-idle" : ""
+            selected && chatMode === "dispute" && messages.length === 0 && !loading
+              ? " chat-dispute-idle"
+              : ""
           }`}
         >
           {!selected ? (
@@ -1438,7 +1438,7 @@ export default function App({
                   </div>
                 )}
 
-                {chatMode === "ask" ? (
+                {chatMode === "ask" || clarification ? (
                   <form className="ask-form" onSubmit={handleAsk}>
                     <input
                       ref={inputRef}
