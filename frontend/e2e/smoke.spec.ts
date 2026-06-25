@@ -1,12 +1,13 @@
 import path from "path";
 import { fileURLToPath } from "url";
 import { expect, test } from "@playwright/test";
+import { startWithCleanLibrary } from "./helpers";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const samplePdf = path.join(repoRoot, "backend/tests/fixtures/sample-rulebook.pdf");
 
 test("upload sample PDF, ask a question, and show a citation", async ({ page }) => {
-  await page.goto("/");
+  await startWithCleanLibrary(page);
 
   await page.locator("#upload-name").fill("E2E Test Game");
   await page.locator('label.upload-btn input[type="file"]').setInputFiles(samplePdf);
