@@ -92,8 +92,28 @@ def _strip_leading_layout_noise(text: str) -> str:
     return cleaned.strip() or stripped
 
 
+_DIAGRAM_SYMBOLS_RE = re.compile(r"[↘↗→←↓↑↔➘➙➜➔✓✗•▪▸►◆◇○●]+")
+_STEP_BEFORE_CAPITAL_RE = re.compile(r"(?<=[.!?])\s+\d\s+(?=[A-Z])")
+_STEP_BEFORE_GRID_RE = re.compile(r"(?<=[.!?])\s+\d\s+(?=\d(?:\s+\d){2,})")
+_DIGIT_RUN_RE = re.compile(r"(?:\b\d\b\s+){3,}\d\b")
+_X_LABEL_RE = re.compile(r"\bx\d+\b", re.IGNORECASE)
+
+
+def _strip_inline_layout_noise(text: str) -> str:
+    """Remove diagram labels and step markers inlined with rules text."""
+    cleaned = _DIAGRAM_SYMBOLS_RE.sub(" ", text)
+    cleaned = _STEP_BEFORE_CAPITAL_RE.sub(" ", cleaned)
+    cleaned = _STEP_BEFORE_GRID_RE.sub(" ", cleaned)
+    cleaned = _DIGIT_RUN_RE.sub(" ", cleaned)
+    cleaned = _X_LABEL_RE.sub(" ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
+
+
 def clean_chunk_text(text: str) -> str:
-    return _strip_leading_layout_noise(text)
+    stripped = _strip_leading_layout_noise(text)
+    cleaned = _strip_inline_layout_noise(stripped)
+    return cleaned or stripped
 
 
 def _is_junk_paragraph(text: str) -> bool:

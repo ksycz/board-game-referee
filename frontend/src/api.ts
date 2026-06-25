@@ -164,6 +164,12 @@ export function cleanSearchExcerpt(text: string): string {
   let cleaned = text.replace(/\s+/g, " ").trim();
   cleaned = cleaned.replace(/^(?:\d{1,3}\s+){2,}/, "");
   cleaned = cleaned.replace(/^\d{1,2}\s+(?=[A-Z])/, "");
+  cleaned = cleaned.replace(/[↘↗→←↓↑↔➘➙➜➔✓✗•▪▸►◆◇○●]+/g, " ");
+  cleaned = cleaned.replace(/(?<=[.!?])\s+\d\s+(?=[A-Z])/g, " ");
+  cleaned = cleaned.replace(/(?<=[.!?])\s+\d\s+(?=\d(?:\s+\d){2,})/g, " ");
+  cleaned = cleaned.replace(/(?:\b\d\b\s+){3,}\d\b/g, " ");
+  cleaned = cleaned.replace(/\bx\d+\b/gi, " ");
+  cleaned = cleaned.replace(/\s+/g, " ").trim();
   return cleaned.trim() || text.trim();
 }
 

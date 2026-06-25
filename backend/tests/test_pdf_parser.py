@@ -113,6 +113,40 @@ def test_strip_leading_layout_noise():
     assert clean_chunk_text("On your turn, draw cards.") == "On your turn, draw cards."
 
 
+def test_strip_inline_diagram_noise_from_setup_steps():
+    noisy = (
+        "Give each player a pencil and a player sheet. 1 Shuffle all the cards and "
+        "randomly remove 7, returning them to the game box. The remaining 20 cards "
+        "form the draw deck. 2 Place the Tedoku die and draw deck in the center of "
+        "the table. 3 1 1 1 3 1 1 2 1 ↘ 2 x7 You can download and print additional "
+        "player sheets, for personal use, from our website."
+    )
+    cleaned = clean_chunk_text(noisy)
+
+    assert "1 1 1 3 1 1 2 1" not in cleaned
+    assert "↘" not in cleaned
+    assert "x7" not in cleaned
+    assert "remove 7" in cleaned
+    assert "20 cards" in cleaned
+    assert "Shuffle all the cards" in cleaned
+    assert "download and print additional player sheets" in cleaned
+
+
+def test_tedoku_setup_page_chunking(tmp_path):
+    pdf_path = Path(__file__).resolve().parents[1] / "data" / "rulebooks"
+    tedoku = next(pdf_path.glob("*Tedoku*"), None)
+    if tedoku is None:
+        return
+
+    chunks = chunk_page_text(2, fitz.open(tedoku)[1].get_text("text"))
+    setup = next(chunk for chunk in chunks if "Shuffle all the cards" in chunk.text)
+
+    assert "↘" not in setup.text
+    assert "x7" not in setup.text
+    assert "1 1 1 3 1 1 2 1" not in setup.text
+    assert "download and print additional player sheets" in setup.text
+
+
 def test_chunk_page_text_strips_graphical_number_prefix():
     page_text = (
         "14 14 3 11 11 Shuffle the Lantern cards, reveal 3 of them, "
