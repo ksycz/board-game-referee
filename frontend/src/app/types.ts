@@ -7,6 +7,7 @@ export type Message = StoredMessage;
 export type ClarificationContext = {
   originalQuestion: string;
   question: string;
+  mode?: "ask" | "dispute";
 };
 
 export type AppError = {

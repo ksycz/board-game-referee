@@ -1,6 +1,6 @@
 import { ApiError, type AskResponse, type HistoryMessage, type Rulebook } from "../api";
 import { trimThread, type RecentExchange } from "../conversationStorage";
-import type { AppError, Message } from "./types";
+import type { AppError, ClarificationContext, Message } from "./types";
 
 export function toAppError(err: unknown): AppError {
   if (err instanceof ApiError) {
@@ -42,6 +42,30 @@ export function appendRulingToThread(
   const last = existing[existing.length - 1];
   const withPrompt = last && matchesPromptMessage(last, prompt) ? existing : [...existing, prompt];
   return trimThread([...withPrompt, { role: "referee", data: answer }]);
+}
+
+export function getPendingClarification(messages: Message[]): ClarificationContext | null {
+  const last = messages[messages.length - 1];
+  if (!last || last.role !== "referee" || !last.data.ruling.needs_clarification) {
+    return null;
+  }
+
+  const question = last.data.ruling.clarification_question?.trim();
+  if (!question) {
+    return null;
+  }
+
+  for (let index = messages.length - 2; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role === "user") {
+      return { originalQuestion: message.text, question, mode: "ask" };
+    }
+    if (message.role === "dispute") {
+      return { originalQuestion: message.situation, question, mode: "dispute" };
+    }
+  }
+
+  return { originalQuestion: "", question, mode: last.data.mode === "dispute" ? "dispute" : "ask" };
 }
 
 export function buildHistory(messages: Message[]): HistoryMessage[] {
