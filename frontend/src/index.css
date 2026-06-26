@@ -918,6 +918,45 @@ body::after {
   padding-top: 0.75rem;
 }
 
+.chat-dispute-thread .messages {
+  flex: 1 1 auto;
+  min-height: 14rem;
+}
+
+.chat-dispute-thread .bubble.referee {
+  border-color: color-mix(in srgb, var(--accent-glow) 50%, var(--border-gold));
+  box-shadow:
+    0 0 0 1px rgb(150 64 88 / 0.18),
+    var(--glow-gold);
+}
+
+.chat-dispute-thread .ruling {
+  color: #f5efe9;
+}
+
+.chat-dispute-thread .reasoning {
+  color: var(--ink-muted);
+}
+
+.dispute-form-toggle {
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--dispute) 45%, var(--border));
+  border-radius: var(--radius-md);
+  background: var(--dispute-soft);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dispute-form-toggle:hover {
+  border-color: var(--dispute);
+  background: color-mix(in srgb, var(--dispute-soft) 70%, var(--surface-raised));
+}
+
 .sidebar-mobile-header,
 .mobile-game-bar,
 .sidebar-backdrop,
@@ -2764,6 +2803,20 @@ details pre {
     flex: 1;
     padding: 0.85rem;
     padding-bottom: 0.5rem;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .chat-dispute-thread .messages {
+    min-height: 42vh;
+  }
+
+  .chat-dispute-thread .chat-composer {
+    flex-shrink: 0;
+  }
+
+  .chat-dispute-thread .dispute-form {
+    max-height: 38vh;
+    overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }
 

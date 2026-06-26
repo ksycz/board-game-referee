@@ -102,6 +102,7 @@ export default function App({
   const [disputeSituation, setDisputeSituation] = useState("");
   const [disputePlayerA, setDisputePlayerA] = useState("");
   const [disputePlayerB, setDisputePlayerB] = useState("");
+  const [disputeFormExpanded, setDisputeFormExpanded] = useState(true);
   const [uploadName, setUploadName] = useState("");
   const [bggUrl, setBggUrl] = useState("");
   const [bggCandidates, setBggCandidates] = useState<BggRulebookFile[] | null>(null);
@@ -254,6 +255,7 @@ export default function App({
     setDisputeSituation("");
     setDisputePlayerA("");
     setDisputePlayerB("");
+    setDisputeFormExpanded(true);
     setError(null);
   }, [updateThread, clearClarificationOverride]);
 
@@ -315,6 +317,12 @@ export default function App({
       })
       .catch((e) => setError(toAppError(e)));
   }, [refresh]);
+
+  useEffect(() => {
+    if (messages.length === 0) {
+      setDisputeFormExpanded(true);
+    }
+  }, [selectedId, messages.length]);
 
   useEffect(() => {
     loadingRef.current = false;
@@ -451,13 +459,17 @@ export default function App({
     }
   }, [chatMode, selectedId]);
 
+  const lastMessageKey = messages.length > 0
+    ? messageDomKey(messages[messages.length - 1], messages.length - 1)
+    : "";
+
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) {
       return;
     }
     container.scrollTop = container.scrollHeight;
-  }, [messages.length, loading, selectedId]);
+  }, [lastMessageKey, loading, selectedId]);
 
   useEffect(() => {
     if (!info) {
@@ -761,6 +773,7 @@ export default function App({
         setDisputeSituation("");
         setDisputePlayerA("");
         setDisputePlayerB("");
+        setDisputeFormExpanded(false);
       }
       const threadWithRuling = commitRuling(requestRulebookId, userMessage, answer);
       persistThreadAndHistory(requestRulebookId, threadWithRuling);
@@ -836,6 +849,7 @@ export default function App({
         setDisputeSituation("");
         setDisputePlayerA("");
         setDisputePlayerB("");
+        setDisputeFormExpanded(false);
       }
     } catch (err) {
       if (activeRequestRulebookRef.current === requestRulebookId) {
@@ -1359,6 +1373,10 @@ export default function App({
             selected && chatMode === "dispute" && messages.length === 0 && !loading
               ? " chat-dispute-idle"
               : ""
+          }${
+            selected && chatMode === "dispute" && messages.length > 0
+              ? " chat-dispute-thread"
+              : ""
           }`}
         >
           {!selected ? (
@@ -1612,6 +1630,20 @@ export default function App({
                     </button>
                   </form>
                 ) : chatMode === "dispute" ? (
+                  !disputeFormExpanded ? (
+                    <button
+                      type="button"
+                      className="dispute-form-toggle"
+                      onClick={() => {
+                        setDisputeFormExpanded(true);
+                        window.requestAnimationFrame(() => {
+                          disputeSituationRef.current?.focus();
+                        });
+                      }}
+                    >
+                      Settle another dispute
+                    </button>
+                  ) : (
                   <form className="dispute-form" onSubmit={handleDispute}>
                     <label className="field-label" htmlFor="dispute-situation">
                       What&apos;s in dispute?
@@ -1666,6 +1698,7 @@ export default function App({
                       {loading ? "Weighing arguments…" : "Settle dispute"}
                     </button>
                   </form>
+                  )
                 ) : (
                   <form className="ask-form" onSubmit={handleAsk}>
                     <input
