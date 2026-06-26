@@ -13,14 +13,18 @@ export function RefereeAnswer({
   rulebookId,
   data,
   overlayDismissTick,
+  awaitingClarification = false,
 }: {
   rulebookId: string;
   data: AskResponse;
   overlayDismissTick: number;
+  awaitingClarification?: boolean;
 }) {
   const { ruling } = data;
   const citation_check = data.citation_check ?? { all_valid: true, issues: [], citations: [] };
-  const needsInput = ruling.needs_clarification && ruling.clarification_question;
+  const needsInput = awaitingClarification
+    && ruling.needs_clarification
+    && ruling.clarification_question;
   const isDispute = data.mode === "dispute";
   const confidenceHint = data.confidence_hint;
 

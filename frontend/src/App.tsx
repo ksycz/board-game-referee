@@ -210,6 +210,34 @@ export default function App({
     });
   }, []);
 
+  const dismissClarification = useCallback((rulebookId: string) => {
+    setClarificationFor(rulebookId, null);
+    setThreads((current) => {
+      const existing = current[rulebookId] ?? [];
+      const last = existing[existing.length - 1];
+      if (last?.role !== "referee" || !last.data.ruling.needs_clarification) {
+        return current;
+      }
+      const patched = existing.map((message, index) => {
+        if (index !== existing.length - 1 || message.role !== "referee") {
+          return message;
+        }
+        return {
+          ...message,
+          data: {
+            ...message.data,
+            ruling: {
+              ...message.data.ruling,
+              needs_clarification: false,
+            },
+          },
+        };
+      });
+      saveThread(rulebookId, patched);
+      return { ...current, [rulebookId]: patched };
+    });
+  }, [setClarificationFor]);
+
   const persistThreadAndHistory = useCallback((rulebookId: string, threadWithRuling: Message[]) => {
     saveThread(rulebookId, threadWithRuling);
     appendExchange(rulebookId, threadWithRuling);
@@ -289,6 +317,11 @@ export default function App({
   }, [refresh]);
 
   useEffect(() => {
+    loadingRef.current = false;
+    activeRequestRulebookRef.current = null;
+  }, [selectedId]);
+
+  useEffect(() => {
     if (activeClarification) {
       inputRef.current?.focus();
     } else if (chatMode === "dispute") {
@@ -342,7 +375,7 @@ export default function App({
             setLibraryOpen(false);
             handled = true;
           } else if (selectedId && activeClarification) {
-            setClarificationFor(selectedId, null);
+            dismissClarification(selectedId);
             handled = true;
           } else if (error) {
             setError(null);
@@ -408,7 +441,7 @@ export default function App({
     libraryOpen,
     loading,
     selectedId,
-    setClarificationFor,
+    dismissClarification,
     startNewConversation,
   ]);
 
@@ -766,7 +799,14 @@ export default function App({
     const situation = disputeSituation.trim();
     const playerA = disputePlayerA.trim();
     const playerB = disputePlayerB.trim();
-    if (!situation || !playerA || !playerB) return;
+    if (!situation || !playerA || !playerB) {
+      setError({ message: "Fill in the situation and both players' arguments before settling." });
+      return;
+    }
+    if (situation.length < 3 || playerA.length < 3 || playerB.length < 3) {
+      setError({ message: "Each dispute field needs at least 3 characters." });
+      return;
+    }
 
     const priorMessages = threads[requestRulebookId] ?? [];
     const history = buildHistory(priorMessages);
@@ -1515,6 +1555,10 @@ export default function App({
                         rulebookId={selected.id}
                         data={msg.data}
                         overlayDismissTick={overlayDismissTick}
+                        awaitingClarification={
+                          activeClarification != null
+                          && i === messages.length - 1
+                        }
                       />
                     </div>
                   )
@@ -1545,7 +1589,7 @@ export default function App({
                     <button
                       type="button"
                       className="clarification-dismiss"
-                      onClick={() => setClarificationFor(selected.id, null)}
+                      onClick={() => dismissClarification(selected.id)}
                     >
                       {activeClarification.mode === "dispute"
                         ? "Settle a different dispute instead"
@@ -1554,26 +1598,20 @@ export default function App({
                   </div>
                 )}
 
-                {chatMode === "ask" || activeClarification ? (
+                {activeClarification ? (
                   <form className="ask-form" onSubmit={handleAsk}>
                     <input
                       ref={inputRef}
                       value={question}
                       onChange={(e) => setQuestion(e.target.value)}
-                      placeholder={
-                        activeClarification
-                          ? "Your answer…"
-                          : messages.length > 0
-                            ? "Ask a follow-up…"
-                            : "Ask a rules question…"
-                      }
+                      placeholder="Your answer…"
                       disabled={loading}
                     />
                     <button type="submit" disabled={loading || uploading || !question.trim()}>
-                      {loading ? "Thinking…" : activeClarification ? "Send detail" : "Ask"}
+                      {loading ? "Thinking…" : "Send detail"}
                     </button>
                   </form>
-                ) : (
+                ) : chatMode === "dispute" ? (
                   <form className="dispute-form" onSubmit={handleDispute}>
                     <label className="field-label" htmlFor="dispute-situation">
                       What&apos;s in dispute?
@@ -1626,6 +1664,23 @@ export default function App({
                       }
                     >
                       {loading ? "Weighing arguments…" : "Settle dispute"}
+                    </button>
+                  </form>
+                ) : (
+                  <form className="ask-form" onSubmit={handleAsk}>
+                    <input
+                      ref={inputRef}
+                      value={question}
+                      onChange={(e) => setQuestion(e.target.value)}
+                      placeholder={
+                        messages.length > 0
+                          ? "Ask a follow-up…"
+                          : "Ask a rules question…"
+                      }
+                      disabled={loading}
+                    />
+                    <button type="submit" disabled={loading || uploading || !question.trim()}>
+                      {loading ? "Thinking…" : "Ask"}
                     </button>
                   </form>
                 )}
