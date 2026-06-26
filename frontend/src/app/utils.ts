@@ -1,6 +1,6 @@
 import { ApiError, type AskResponse, type HistoryMessage, type Rulebook } from "../api";
 import { trimThread, type RecentExchange } from "../conversationStorage";
-import type { AppError, ClarificationContext, Message } from "./types";
+import type { AppError, ChatMode, ClarificationContext, Message } from "./types";
 
 export function toAppError(err: unknown): AppError {
   if (err instanceof ApiError) {
@@ -66,6 +66,40 @@ export function getPendingClarification(messages: Message[]): ClarificationConte
   }
 
   return { originalQuestion: "", question, mode: last.data.mode === "dispute" ? "dispute" : "ask" };
+}
+
+export function getActiveClarification(
+  messages: Message[],
+  chatMode: ChatMode,
+  override: ClarificationContext | null | undefined,
+): ClarificationContext | null {
+  if (chatMode === "search") {
+    return null;
+  }
+
+  const pending = override !== undefined ? override : getPendingClarification(messages);
+  if (!pending) {
+    return null;
+  }
+
+  const mode = pending.mode ?? "ask";
+  if (mode === "ask" && chatMode === "dispute") {
+    return null;
+  }
+
+  return pending;
+}
+
+export function findLastDisputeMessage(
+  messages: Message[],
+): Extract<Message, { role: "dispute" }> | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role === "dispute") {
+      return message;
+    }
+  }
+  return null;
 }
 
 export function buildHistory(messages: Message[]): HistoryMessage[] {

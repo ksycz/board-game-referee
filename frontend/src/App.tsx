@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import {
   BggRulebookFile,
   Rulebook,
@@ -54,6 +55,8 @@ import {
   SIDEBAR_LIST_PREVIEW_LIMIT,
   appendRulingToThread,
   buildHistory,
+  findLastDisputeMessage,
+  getActiveClarification,
   getPendingClarification,
   isEditableTarget,
   loadSidebarCollapsed,
@@ -158,9 +161,7 @@ export default function App({
   const clarificationOverride = selectedId && selectedId in clarifications
     ? clarifications[selectedId]
     : undefined;
-  const pendingClarification = clarificationOverride !== undefined
-    ? clarificationOverride
-    : getPendingClarification(messages);
+  const activeClarification = getActiveClarification(messages, chatMode, clarificationOverride);
   const exampleQuestions = selectedId ? examples[selectedId] ?? [] : [];
   const recentExchanges = selectedId ? listRecentExchanges(history[selectedId] ?? []) : [];
   const displayedRecentExchanges = visibleRecentExchanges(recentExchanges, showAllRecentExchanges);
@@ -276,10 +277,12 @@ export default function App({
   }, [refresh]);
 
   useEffect(() => {
-    if (pendingClarification) {
+    if (activeClarification) {
       inputRef.current?.focus();
+    } else if (chatMode === "dispute") {
+      disputeSituationRef.current?.focus();
     }
-  }, [pendingClarification]);
+  }, [activeClarification, chatMode, selectedId]);
 
   useEffect(() => {
     quickSearchSeqRef.current += 1;
@@ -326,7 +329,7 @@ export default function App({
           } else if (libraryOpen) {
             setLibraryOpen(false);
             handled = true;
-          } else if (selectedId && pendingClarification) {
+          } else if (selectedId && activeClarification) {
             setClarificationFor(selectedId, null);
             handled = true;
           } else if (error) {
@@ -362,7 +365,7 @@ export default function App({
         event.preventDefault();
         if (chatMode === "search") {
           quickSearchInputRef.current?.focus();
-        } else if (chatMode === "ask" || pendingClarification) {
+        } else if (chatMode === "ask" || activeClarification) {
           inputRef.current?.focus();
         } else {
           disputeSituationRef.current?.focus();
@@ -382,7 +385,7 @@ export default function App({
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [
     chatMode,
-    pendingClarification,
+    activeClarification,
     clearConversation,
     error,
     effectiveSidebarCollapsed,
@@ -600,11 +603,13 @@ export default function App({
     answer: AskResponse,
   ): Message[] {
     let threadWithRuling: Message[] = [];
-    setThreads((current) => {
-      const existing = current[rulebookId] ?? [];
-      threadWithRuling = appendRulingToThread(existing, prompt, answer);
-      saveThread(rulebookId, threadWithRuling);
-      return { ...current, [rulebookId]: threadWithRuling };
+    flushSync(() => {
+      setThreads((current) => {
+        const existing = current[rulebookId] ?? [];
+        threadWithRuling = appendRulingToThread(existing, prompt, answer);
+        saveThread(rulebookId, threadWithRuling);
+        return { ...current, [rulebookId]: threadWithRuling };
+      });
     });
     return threadWithRuling;
   }
@@ -626,7 +631,7 @@ export default function App({
     setLoading(true);
     setError(null);
     try {
-      const activeClarification = requestRulebookId in clarifications
+      const priorClarification = requestRulebookId in clarifications
         ? clarifications[requestRulebookId]
         : getPendingClarification(priorMessages);
       const answer = await askRulebook(requestRulebookId, trimmed, history);
@@ -635,12 +640,84 @@ export default function App({
       }
       if (answer.ruling.needs_clarification && answer.ruling.clarification_question) {
         setClarificationFor(requestRulebookId, {
-          originalQuestion: activeClarification?.originalQuestion ?? trimmed,
+          originalQuestion: priorClarification?.originalQuestion ?? trimmed,
           question: answer.ruling.clarification_question,
-          mode: activeClarification?.mode ?? "ask",
+          mode: priorClarification?.mode ?? "ask",
         });
       } else {
         setClarificationFor(requestRulebookId, null);
+      }
+      const threadWithRuling = commitRuling(requestRulebookId, userMessage, answer);
+      persistThreadAndHistory(requestRulebookId, threadWithRuling);
+      setQuestion("");
+    } catch (err) {
+      if (activeRequestRulebookRef.current === requestRulebookId) {
+        setError(toAppError(err));
+      }
+    } finally {
+      if (activeRequestRulebookRef.current === requestRulebookId) {
+        loadingRef.current = false;
+        activeRequestRulebookRef.current = null;
+        setLoading(false);
+      }
+    }
+  }
+
+  async function submitClarification(reply: string) {
+    if (!selectedId || !reply.trim() || loadingRef.current) {
+      return;
+    }
+
+    const requestRulebookId = selectedId;
+    const trimmed = reply.trim();
+    const priorMessages = threads[requestRulebookId] ?? [];
+    const clarificationContext = requestRulebookId in clarifications
+      ? clarifications[requestRulebookId]
+      : getPendingClarification(priorMessages);
+
+    if (clarificationContext?.mode !== "dispute") {
+      await submitQuestion(trimmed);
+      return;
+    }
+
+    const lastDispute = findLastDisputeMessage(priorMessages);
+    if (!lastDispute) {
+      await submitQuestion(trimmed);
+      return;
+    }
+
+    const userMessage = { role: "user" as const, text: trimmed };
+    updateThread(requestRulebookId, (current) => [...current, userMessage]);
+
+    const history = buildHistory(priorMessages);
+    history.push({ role: "user", content: trimmed });
+
+    loadingRef.current = true;
+    activeRequestRulebookRef.current = requestRulebookId;
+    setLoading(true);
+    setError(null);
+    try {
+      const answer = await disputeRulebook(
+        requestRulebookId,
+        lastDispute.situation,
+        lastDispute.playerA,
+        lastDispute.playerB,
+        history,
+      );
+      if (activeRequestRulebookRef.current !== requestRulebookId) {
+        return;
+      }
+      if (answer.ruling.needs_clarification && answer.ruling.clarification_question) {
+        setClarificationFor(requestRulebookId, {
+          originalQuestion: lastDispute.situation,
+          question: answer.ruling.clarification_question,
+          mode: "dispute",
+        });
+      } else {
+        setClarificationFor(requestRulebookId, null);
+        setDisputeSituation("");
+        setDisputePlayerA("");
+        setDisputePlayerB("");
       }
       const threadWithRuling = commitRuling(requestRulebookId, userMessage, answer);
       persistThreadAndHistory(requestRulebookId, threadWithRuling);
@@ -664,6 +741,10 @@ export default function App({
 
     const reply = question.trim();
     setQuestion("");
+    if (activeClarification) {
+      await submitClarification(reply);
+      return;
+    }
     await submitQuestion(reply);
   }
 
@@ -1448,10 +1529,10 @@ export default function App({
 
               {chatMode !== "search" && (
               <div className="chat-composer">
-                {pendingClarification && (
+                {activeClarification && (
                   <div className="clarification-prompt" role="status">
                     <p className="clarification-prompt-label">Referee needs one detail</p>
-                    <p className="clarification-prompt-question">{pendingClarification.question}</p>
+                    <p className="clarification-prompt-question">{activeClarification.question}</p>
                     <button
                       type="button"
                       className="clarification-dismiss"
@@ -1462,14 +1543,14 @@ export default function App({
                   </div>
                 )}
 
-                {chatMode === "ask" || pendingClarification ? (
+                {chatMode === "ask" || activeClarification ? (
                   <form className="ask-form" onSubmit={handleAsk}>
                     <input
                       ref={inputRef}
                       value={question}
                       onChange={(e) => setQuestion(e.target.value)}
                       placeholder={
-                        pendingClarification
+                        activeClarification
                           ? "Your answer…"
                           : messages.length > 0
                             ? "Ask a follow-up…"
@@ -1478,7 +1559,7 @@ export default function App({
                       disabled={loading}
                     />
                     <button type="submit" disabled={loading || uploading || !question.trim()}>
-                      {loading ? "Thinking…" : pendingClarification ? "Send detail" : "Ask"}
+                      {loading ? "Thinking…" : activeClarification ? "Send detail" : "Ask"}
                     </button>
                   </form>
                 ) : (
