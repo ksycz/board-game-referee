@@ -10,6 +10,7 @@ import {
   disputeRulebook,
   fetchExampleQuestions,
   buildRulebookHealthSummary,
+  formatRulebookHealthCopy,
   formatUploadProgressMessage,
   formatFileSize,
   isDuplicateRulebookError,
@@ -478,6 +479,17 @@ export default function App({
     const timer = window.setTimeout(() => setInfo(null), 8000);
     return () => window.clearTimeout(timer);
   }, [info]);
+
+  useEffect(() => {
+    if (!uploadHealth) {
+      return;
+    }
+    if (formatRulebookHealthCopy(uploadHealth).cautions.length > 0) {
+      return;
+    }
+    const timer = window.setTimeout(() => setUploadHealth(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [uploadHealth]);
 
   useEffect(() => {
     if (!selectedId || examples[selectedId]) {
