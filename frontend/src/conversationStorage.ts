@@ -111,6 +111,29 @@ export function trimThread(messages: StoredMessage[]): StoredMessage[] {
   return messages.slice(start);
 }
 
+/** Drop a stray dispute bubble left by an optimistic update racing the ruling commit. */
+export function repairRaceCorruptedThread(messages: StoredMessage[]): StoredMessage[] {
+  if (messages.length < 3) {
+    return messages;
+  }
+
+  const last = messages[messages.length - 1];
+  const prev = messages[messages.length - 2];
+  const prev2 = messages[messages.length - 3];
+  if (
+    last.role === "dispute"
+    && prev.role === "referee"
+    && prev2.role === "dispute"
+    && last.situation === prev2.situation
+    && last.playerA === prev2.playerA
+    && last.playerB === prev2.playerB
+  ) {
+    return messages.slice(0, -1);
+  }
+
+  return messages;
+}
+
 function trimHistory(entries: HistoryExchange[]): HistoryExchange[] {
   return entries.slice(-MAX_STORED_EXCHANGES);
 }

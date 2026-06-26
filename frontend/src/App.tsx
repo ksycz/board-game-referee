@@ -41,6 +41,7 @@ import {
   listRecentExchanges,
   loadAllHistory,
   loadAllThreads,
+  repairRaceCorruptedThread,
   setHistoryExchangePinned,
   removeHistoryExchange,
   removeRulebookStorage,
@@ -81,7 +82,18 @@ export default function App({
 }) {
   const [rulebooks, setRulebooks] = useState<Rulebook[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [threads, setThreads] = useState<Record<string, Message[]>>(() => loadAllThreads());
+  const [threads, setThreads] = useState<Record<string, Message[]>>(() => {
+    const loaded = loadAllThreads();
+    const repaired: Record<string, Message[]> = {};
+    for (const [rulebookId, thread] of Object.entries(loaded)) {
+      const fixed = repairRaceCorruptedThread(thread);
+      if (fixed !== thread) {
+        saveThread(rulebookId, fixed);
+      }
+      repaired[rulebookId] = fixed;
+    }
+    return repaired;
+  });
   const [history, setHistory] = useState<Record<string, HistoryExchange[]>>(() => loadAllHistory());
   const [clarifications, setClarifications] = useState<Record<string, ClarificationContext | null>>({});
   const [examples, setExamples] = useState<Record<string, string[]>>({});
@@ -624,7 +636,6 @@ export default function App({
     const priorMessages = threads[requestRulebookId] ?? [];
     const history = buildHistory(priorMessages);
     const userMessage = { role: "user" as const, text: trimmed };
-    updateThread(requestRulebookId, (current) => [...current, userMessage]);
 
     loadingRef.current = true;
     activeRequestRulebookRef.current = requestRulebookId;
@@ -687,7 +698,6 @@ export default function App({
     }
 
     const userMessage = { role: "user" as const, text: trimmed };
-    updateThread(requestRulebookId, (current) => [...current, userMessage]);
 
     const history = buildHistory(priorMessages);
     history.push({ role: "user", content: trimmed });
@@ -761,7 +771,6 @@ export default function App({
     const priorMessages = threads[requestRulebookId] ?? [];
     const history = buildHistory(priorMessages);
     const disputeMessage = { role: "dispute" as const, situation, playerA, playerB };
-    updateThread(requestRulebookId, (current) => [...current, disputeMessage]);
 
     loadingRef.current = true;
     activeRequestRulebookRef.current = requestRulebookId;
@@ -1538,7 +1547,9 @@ export default function App({
                       className="clarification-dismiss"
                       onClick={() => setClarificationFor(selected.id, null)}
                     >
-                      Ask something else instead
+                      {activeClarification.mode === "dispute"
+                        ? "Settle a different dispute instead"
+                        : "Ask something else instead"}
                     </button>
                   </div>
                 )}
