@@ -294,6 +294,14 @@ export default function App({
     setError(null);
   }, [updateThread, clearClarificationOverride]);
 
+  const resetQuickSearch = useCallback(() => {
+    quickSearchSeqRef.current += 1;
+    setQuickSearchQuery("");
+    setQuickSearchHits(null);
+    setQuickSearchLoading(false);
+    setQuickSearchSelected(null);
+  }, []);
+
   const startNewConversation = useCallback((rulebookId: string) => {
     clearConversation(rulebookId);
     setChatMode((mode) => (mode === "search" ? "ask" : mode));
@@ -384,13 +392,9 @@ export default function App({
   }, [activeClarification, chatMode, selectedId]);
 
   useEffect(() => {
-    quickSearchSeqRef.current += 1;
-    setQuickSearchQuery("");
-    setQuickSearchHits(null);
-    setQuickSearchLoading(false);
-    setQuickSearchSelected(null);
+    resetQuickSearch();
     setShowAllRecentExchanges(false);
-  }, [selectedId]);
+  }, [selectedId, resetQuickSearch]);
 
   useEffect(() => {
     if (overlayDismissTick > 0) {
@@ -1055,6 +1059,12 @@ export default function App({
     if (!confirmed) {
       return;
     }
+    resetQuickSearch();
+    setQuestion("");
+    setDisputeSituation("");
+    setDisputePlayerA("");
+    setDisputePlayerB("");
+    setDisputeFormExpanded(true);
     setUploading(true);
     setIngestSource("reindex");
     setUploadProgress({ phase: "starting", page: 0, total_pages: 0 });
