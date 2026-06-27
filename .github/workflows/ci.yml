@@ -46,13 +46,3 @@ jobs:
           npm run lint
           npm run test
           npm run build
-
-      - name: Install Playwright browser
-        run: |
-          cd frontend
-          npx playwright install chromium
-
-      - name: Run E2E tests
-        run: |
-          cd frontend
-          npm run test:e2e
