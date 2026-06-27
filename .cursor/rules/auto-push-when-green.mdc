@@ -1,0 +1,58 @@
+---
+description: Commit and push fixes automatically after local lint and CI checks pass
+alwaysApply: true
+---
+
+# Auto-push when checks are green
+
+After implementing a fix or feature, do **not** wait for the user to say "push". Commit and push once local checks pass.
+
+This overrides generic "ask before committing" guidance for this repo.
+
+## When to auto-push
+
+Push when **all** of the following are true:
+
+1. The task is a completed fix or feature (not exploratory or review-only work)
+2. There are uncommitted changes worth shipping
+3. Required local checks pass (see below)
+4. The user has not said "don't push" or "don't commit"
+
+## Required checks before push
+
+Match `.github/workflows/ci.yml`:
+
+**Always run (frontend touched or repo-wide change):**
+```bash
+cd frontend && npm run lint && npm run build
+```
+
+**If `backend/` changed:**
+```bash
+cd backend && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt -q && pytest -q
+```
+
+**If frontend behavior or flows changed** (ask/dispute/upload UI, routing, E2E-covered paths):
+```bash
+cd frontend && npm run test:e2e
+```
+Use `scripts/e2e-backend.sh` if the E2E workflow needs a running backend.
+
+Skip E2E only for trivial CSS/copy tweaks with no behavioral change.
+
+## Commit and push workflow
+
+1. Run the required checks above; fix failures before committing
+2. `git status` and `git diff` to confirm the change set
+3. Stage only relevant files (never `.env`, secrets, or build artifacts)
+4. Commit with a concise message focused on **why**
+5. `git push`
+6. Tell the user what was pushed and which checks ran
+
+## If checks fail
+
+Do not push. Fix the failures or report what is blocking if you cannot fix them.
+
+## If checks cannot run locally
+
+If the environment cannot run a required check (missing Python, Playwright, etc.), say so and ask whether to push anyway or wait.
