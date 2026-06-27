@@ -17,6 +17,8 @@ from pydantic import BaseModel, Field
 
 from agents.pipeline import RefereePipeline
 from config import (
+    ANTHROPIC_API_KEY,
+    API_ACCESS_KEY,
     CORS_ORIGINS,
     DATA_DIR,
     DEMO_MODE,
@@ -72,8 +74,21 @@ def _e2e_stub_enabled() -> bool:
     return True
 
 
+def _validate_deployment_config() -> None:
+    if not IS_PRODUCTION:
+        return
+    if DEMO_MODE or not ANTHROPIC_API_KEY:
+        return
+    if not API_ACCESS_KEY:
+        raise RuntimeError(
+            "API_ACCESS_KEY is required in production when ANTHROPIC_API_KEY is set. "
+            "Set DEMO_MODE=1 for a public demo, or configure API_ACCESS_KEY for private access."
+        )
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    _validate_deployment_config()
     removed = pipeline.dedupe_rulebooks()
     if removed:
         logger.info("Removed %s duplicate rulebook(s) at startup", removed)

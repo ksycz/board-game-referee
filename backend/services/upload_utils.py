@@ -8,6 +8,7 @@ from pathlib import Path
 from config import MAX_PDF_BYTES
 
 PDF_MAGIC = b"%PDF"
+_PDF_VERSION_RE = re.compile(rb"%PDF-1\.[0-7]")
 _READ_CHUNK_SIZE = 1024 * 1024
 
 
@@ -21,6 +22,26 @@ def safe_stored_filename(name: str) -> str:
 def ensure_pdf_magic(content: bytes) -> None:
     if not content.startswith(PDF_MAGIC):
         raise ValueError("File is not a valid PDF.")
+
+
+def ensure_pdf_structure(content: bytes) -> None:
+    """Validate PDF header, reject obvious polyglots, and require a trailer EOF marker."""
+    ensure_pdf_magic(content)
+    if len(content) < 64:
+        raise ValueError("File is not a valid PDF.")
+    if not _PDF_VERSION_RE.match(content[:16]):
+        raise ValueError("File is not a valid PDF.")
+
+    head = content[:4096].lower()
+    if b"<html" in head or b"<!doctype html" in head:
+        raise ValueError("File is not a valid PDF.")
+
+    if b"%%EOF" not in content[-2048:]:
+        raise ValueError("File is not a valid PDF.")
+
+
+def validate_pdf_file(pdf_path: Path) -> None:
+    ensure_pdf_structure(pdf_path.read_bytes())
 
 
 def ensure_pdf_size(content: bytes, *, max_bytes: int | None = None) -> None:
@@ -48,7 +69,7 @@ async def read_bounded_pdf_upload(file, *, max_bytes: int | None = None) -> byte
     content = b"".join(parts)
     if not content:
         raise ValueError("Empty file")
-    ensure_pdf_magic(content)
+    ensure_pdf_structure(content)
     return content
 
 
@@ -78,8 +99,10 @@ __all__ = [
     "MAX_PDF_BYTES",
     "PDF_MAGIC",
     "ensure_pdf_magic",
+    "ensure_pdf_structure",
     "ensure_pdf_size",
     "read_bounded_http_body",
     "read_bounded_pdf_upload",
     "safe_stored_filename",
+    "validate_pdf_file",
 ]

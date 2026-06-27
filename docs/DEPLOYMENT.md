@@ -173,6 +173,7 @@ Requests with a valid API key bypass demo restrictions on the same instance.
 - [ ] Persistent volume on `/data` (not ephemeral-only hosting)
 - [ ] `CORS_ORIGINS` matches your public URL exactly
 - [ ] Anthropic monthly spend cap set
+- [ ] Understand [data at rest](#data-at-rest) — PDFs and indexes are unencrypted on disk
 - [ ] Public smoke test: sample game → ask → citation
 - [ ] Family smoke test: `?access=` → upload PDF → ask (second device optional)
 - [ ] README lists **public URL only**
@@ -191,6 +192,22 @@ Full features, no demo mode, no API key:
 Frontend: http://localhost:5173 · Backend: http://localhost:8000
 
 Data persists in `backend/data/` on your machine between runs.
+
+---
+
+## Data at rest
+
+Uploaded rulebooks, the Chroma vector index, and the FAQ cache are stored as **plain files on disk** under `DATA_DIR` (default `backend/data/` locally, `/data` in Docker). Nothing is encrypted at rest by this app.
+
+| Path under `DATA_DIR` | Contents |
+|-----------------------|----------|
+| `rulebooks/` | Original PDF files |
+| `chroma/` | Vector embeddings and chunk text |
+| `faq_cache/` | Cached ask/dispute answers |
+
+Treat the volume like any other sensitive file store: restrict filesystem access on the host, use encrypted disks where your platform supports them, and back up or wipe the volume when decommissioning an instance.
+
+Retrieval telemetry and ruling-feedback JSONL logs (when enabled) may include rulebook IDs and metrics; user questions are **redacted outside production** (`ENVIRONMENT=production` keeps full text for ops tuning — disable with `RETRIEVAL_TELEMETRY=0` if you do not want that).
 
 ---
 

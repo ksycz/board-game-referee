@@ -12,7 +12,7 @@ from typing import Any
 
 from config import BGG_API_TOKEN
 import config as app_config
-from services.upload_utils import ensure_pdf_magic, ensure_pdf_size, read_bounded_http_body
+from services.upload_utils import ensure_pdf_magic, ensure_pdf_size, ensure_pdf_structure, read_bounded_http_body
 
 BGG_BASE = "https://boardgamegeek.com"
 BGG_FILES_API = f"{BGG_BASE}/api/files"
@@ -204,7 +204,7 @@ def download_rulebook_pdf(
         raise BggError(f"Could not reach BoardGameGeek: {exc.reason}") from exc
 
     try:
-        ensure_pdf_magic(data)
+        ensure_pdf_structure(data)
     except ValueError as exc:
         raise BggDownloadError(
             "BoardGameGeek blocks server-side PDF downloads. "

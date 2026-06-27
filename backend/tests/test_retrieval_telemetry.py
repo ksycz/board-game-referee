@@ -161,3 +161,43 @@ def test_summarize_telemetry_log(tmp_path):
     assert summary["avg_citation_pass_rate"] == 0.75
     assert summary["citations_missing_from_retrieval"] == 1
     assert summary["all_valid_rate"] == 0.5
+
+
+def test_redacts_prompt_fields_outside_production(monkeypatch, tmp_path):
+    from services import retrieval_telemetry
+
+    monkeypatch.setattr(retrieval_telemetry, "IS_PRODUCTION", False)
+    log_path = tmp_path / "telemetry-redacted.jsonl"
+    retrieval_telemetry.log_retrieval_event(
+        {
+            "mode": "ask",
+            "question": "Can I attack on turn one?",
+            "situation": "ignored",
+            "search_query": "attack first turn",
+            "metrics": {"citation_recall": 1.0},
+        },
+        log_path=log_path,
+        enabled=True,
+    )
+    line = log_path.read_text(encoding="utf-8")
+    assert "Can I attack" not in line
+    assert '"question": "[redacted]"' in line
+    assert '"search_query": "[redacted]"' in line
+
+
+def test_keeps_prompt_fields_in_production(monkeypatch, tmp_path):
+    from services import retrieval_telemetry
+
+    monkeypatch.setattr(retrieval_telemetry, "IS_PRODUCTION", True)
+    log_path = tmp_path / "telemetry-full.jsonl"
+    retrieval_telemetry.log_retrieval_event(
+        {
+            "mode": "ask",
+            "question": "Can I attack on turn one?",
+            "metrics": {},
+        },
+        log_path=log_path,
+        enabled=True,
+    )
+    line = log_path.read_text(encoding="utf-8")
+    assert "Can I attack on turn one?" in line

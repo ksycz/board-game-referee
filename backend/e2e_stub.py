@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from services.vector_store import StoredChunk
 
+CLARIFY_TRIGGER = "clarify:"
+
 
 def install_stub_referee(pipeline) -> None:
     pipeline._referee = StubReferee()
@@ -16,7 +18,6 @@ class StubReferee:
         chunks: list[StoredChunk],
         history: list[dict] | None = None,
     ) -> dict:
-        del history
         if not chunks:
             return {
                 "agent": "referee",
@@ -26,6 +27,17 @@ class StubReferee:
                 "citations": [],
                 "needs_clarification": False,
                 "clarification_question": None,
+            }
+
+        if CLARIFY_TRIGGER in question.lower() and not history:
+            return {
+                "agent": "referee",
+                "ruling": "I need one detail before I can rule on that.",
+                "confidence": "medium",
+                "reasoning": "Stub referee requested clarification.",
+                "citations": [],
+                "needs_clarification": True,
+                "clarification_question": "How many players are at the table?",
             }
 
         page, quote, section = _grounded_citation(chunks, "first turn")

@@ -9,6 +9,7 @@ from starlette.datastructures import UploadFile
 from services.upload_utils import (
     ensure_pdf_magic,
     ensure_pdf_size,
+    ensure_pdf_structure,
     read_bounded_http_body,
     read_bounded_pdf_upload,
     safe_stored_filename,
@@ -44,6 +45,22 @@ def test_ensure_pdf_size_rejects_large_files():
 def test_ensure_pdf_magic_rejects_non_pdf():
     with pytest.raises(ValueError, match="not a valid PDF"):
         ensure_pdf_magic(b"not-a-pdf")
+
+
+def test_ensure_pdf_structure_rejects_html_polyglot():
+    with pytest.raises(ValueError, match="not a valid PDF"):
+        ensure_pdf_structure(b"%PDF-1.4\n<html><body>fake</body></html>")
+
+
+def test_ensure_pdf_structure_rejects_missing_eof():
+    with pytest.raises(ValueError, match="not a valid PDF"):
+        ensure_pdf_structure(b"%PDF-1.4\n" + b"x" * 128)
+
+
+def test_ensure_pdf_structure_accepts_minimal_pdf():
+    minimal = b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n"
+    padded = minimal + b"\n" + b" " * max(0, 64 - len(minimal) - 1)
+    ensure_pdf_structure(padded)
 
 
 def test_read_bounded_pdf_upload_rejects_non_pdf():

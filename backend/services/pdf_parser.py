@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import shutil
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,11 +18,13 @@ from config import (
     CHUNK_MAX_CHARS,
     CHUNK_MIN_CHARS,
     MAX_PDF_PAGES,
+    MAX_PDF_PARSE_SECONDS,
     OCR_DPI,
     OCR_FALLBACK,
     OCR_LANGUAGE,
     OCR_MIN_INDEXABLE_CHARS,
 )
+from services.upload_utils import validate_pdf_file
 
 logger = logging.getLogger(__name__)
 _tesseract_missing_logged = False
@@ -421,6 +424,7 @@ def extract_chunks(
 
     Returns (chunks, total_pages, pages_indexed, ocr_pages, thin_pages).
     """
+    validate_pdf_file(pdf_path)
     doc = fitz.open(pdf_path)
     chunks: list[TextChunk] = []
     pages_indexed = 0
@@ -434,12 +438,17 @@ def extract_chunks(
         )
     if OCR_FALLBACK:
         ensure_tesseract_path()
+    parse_deadline = time.monotonic() + MAX_PDF_PARSE_SECONDS
     _emit_progress(
         on_progress,
         {"phase": "starting", "page": 0, "total_pages": total_pages},
     )
     try:
         for index in range(total_pages):
+            if time.monotonic() > parse_deadline:
+                raise ValueError(
+                    f"PDF processing timed out after {MAX_PDF_PARSE_SECONDS:.0f} seconds."
+                )
             page_number = index + 1
             _emit_progress(
                 on_progress,

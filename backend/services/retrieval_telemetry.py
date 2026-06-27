@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from config import (
+    IS_PRODUCTION,
     RETRIEVAL_LOG_PATH,
     RETRIEVAL_TELEMETRY,
     RULING_FEEDBACK_ENABLED,
@@ -113,6 +114,17 @@ def compute_confidence_hint(
     }
 
 
+def _redact_sensitive_fields(event: dict[str, Any]) -> dict[str, Any]:
+    """Strip user prompts from telemetry outside production."""
+    if IS_PRODUCTION:
+        return event
+    redacted = dict(event)
+    for field in ("question", "situation", "search_query"):
+        if field in redacted:
+            redacted[field] = "[redacted]"
+    return redacted
+
+
 def log_retrieval_event(
     event: dict[str, Any],
     *,
@@ -128,7 +140,7 @@ def log_retrieval_event(
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "timestamp": datetime.now(UTC).isoformat(),
-        **event,
+        **_redact_sensitive_fields(event),
     }
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
@@ -150,7 +162,7 @@ def log_ruling_feedback(
     payload = {
         "timestamp": datetime.now(UTC).isoformat(),
         "event": "ruling_feedback",
-        **event,
+        **_redact_sensitive_fields(event),
     }
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
