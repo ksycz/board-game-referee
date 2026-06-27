@@ -9,7 +9,7 @@ import anthropic
 
 from errors import RateLimitError
 
-from config import ANTHROPIC_API_KEY, MODEL
+from config import ANTHROPIC_API_KEY, ANTHROPIC_TIMEOUT_SECONDS, MODEL
 from services.conversation import format_history_block
 from services.vector_store import StoredChunk
 
@@ -122,7 +122,10 @@ class RefereeAgent:
         key = api_key or ANTHROPIC_API_KEY
         if not key:
             raise ValueError("ANTHROPIC_API_KEY is required")
-        self.client = anthropic.Anthropic(api_key=key)
+        self.client = anthropic.Anthropic(
+            api_key=key,
+            timeout=ANTHROPIC_TIMEOUT_SECONDS,
+        )
 
     def rule_on(
         self,

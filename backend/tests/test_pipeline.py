@@ -68,7 +68,8 @@ def test_pipeline_ask_passes_trimmed_history_to_referee(sample_pdf, isolated_dat
     assert capturing.question == "What about the first turn?"
     assert capturing.history is not None
     assert len(capturing.history) == 12
-    assert capturing.history[-2]["content"] == "Can I attack on my turn?"
+    assert all(msg["role"] == "user" for msg in capturing.history)
+    assert capturing.history[-1]["content"] == "Can I attack on my turn?"
     assert result["ruling"]["ruling"] == "Ruling for What about the first turn?"
 
 

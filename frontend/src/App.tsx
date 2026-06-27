@@ -258,7 +258,12 @@ export default function App({
 
   const persistThreadAndHistory = useCallback((rulebookId: string, threadWithRuling: Message[]) => {
     saveThread(rulebookId, threadWithRuling);
-    appendExchange(rulebookId, threadWithRuling);
+    const lastMessage = threadWithRuling[threadWithRuling.length - 1];
+    const isIncompleteClarification = lastMessage?.role === "referee"
+      && lastMessage.data.ruling.needs_clarification;
+    if (!isIncompleteClarification) {
+      appendExchange(rulebookId, threadWithRuling);
+    }
     setHistory((hist) => ({
       ...hist,
       [rulebookId]: loadAllHistory()[rulebookId] ?? [],
@@ -344,6 +349,7 @@ export default function App({
   useEffect(() => {
     loadingRef.current = false;
     activeRequestRulebookRef.current = null;
+    setLoading(false);
   }, [selectedId]);
 
   useEffect(() => {
@@ -536,16 +542,28 @@ export default function App({
 
   const selected = rulebooks.find((b) => b.id === selectedId);
 
-  function openHistoryExchange(rulebookId: string, exchangeId: string) {
+  async function openHistoryExchange(rulebookId: string, exchangeId: string) {
     const entry = getHistoryExchange(rulebookId, exchangeId);
     if (!entry) {
       return;
+    }
+    const currentMessages = threads[rulebookId] ?? [];
+    if (currentMessages.length > 0) {
+      const confirmed = await confirm({
+        title: "Open this ruling?",
+        message: "This replaces your current conversation for this game.",
+        confirmLabel: "Open",
+      });
+      if (!confirmed) {
+        return;
+      }
     }
     setThreads((current) => {
       saveThread(rulebookId, entry.messages);
       return { ...current, [rulebookId]: entry.messages };
     });
     clearClarificationOverride(rulebookId);
+    setChatMode(entry.mode);
   }
 
   function removeRecentExchange(rulebookId: string, exchangeId: string) {
@@ -986,6 +1004,13 @@ export default function App({
         [id]: result.example_questions,
       }));
       await refresh();
+      updateThread(id, () => []);
+      clearClarificationOverride(id);
+      setHistory((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
       setUploadHealth(buildRulebookHealthSummary(result.rulebook.name, result.ingestion));
       if ((result.faq_cache_cleared ?? 0) > 0) {
         setInfo(`Cleared ${result.faq_cache_cleared} cached answer(s) for this game.`);
@@ -1368,7 +1393,7 @@ export default function App({
                   <li key={`${selected.id}-${exchange.id}`}>
                     <button
                       type="button"
-                      onClick={() => openHistoryExchange(selected.id, exchange.id)}
+                      onClick={() => void openHistoryExchange(selected.id, exchange.id)}
                     >
                       <span className="book-icon">
                         <IconScales className="icon icon-sm" />

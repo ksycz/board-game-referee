@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import threading
 from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
@@ -50,35 +51,38 @@ class FaqCache:
         self.enabled = FAQ_CACHE_ENABLED if enabled is None else enabled
         self.max_entries = max_entries if max_entries is not None else FAQ_CACHE_MAX_ENTRIES
         self._books: dict[str, dict[str, Any]] = {}
+        self._lock = threading.RLock()
 
     def _path(self, rulebook_id: str) -> Path:
         return self._cache_dir / f"{rulebook_id}.json"
 
     def _load_book(self, rulebook_id: str) -> dict[str, Any]:
-        if rulebook_id in self._books:
-            return self._books[rulebook_id]
+        with self._lock:
+            if rulebook_id in self._books:
+                return self._books[rulebook_id]
 
-        path = self._path(rulebook_id)
-        if path.exists():
-            book = json.loads(path.read_text(encoding="utf-8"))
-        else:
-            book = {"entries": {}}
+            path = self._path(rulebook_id)
+            if path.exists():
+                book = json.loads(path.read_text(encoding="utf-8"))
+            else:
+                book = {"entries": {}}
 
-        book.setdefault("entries", {})
-        self._books[rulebook_id] = book
-        return book
+            book.setdefault("entries", {})
+            self._books[rulebook_id] = book
+            return book
 
     def _save_book(self, rulebook_id: str) -> None:
-        book = self._books.get(rulebook_id)
-        if book is None:
-            return
-        path = self._path(rulebook_id)
-        temp_path = path.with_suffix(".json.tmp")
-        temp_path.write_text(
-            json.dumps(book, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
-        temp_path.replace(path)
+        with self._lock:
+            book = self._books.get(rulebook_id)
+            if book is None:
+                return
+            path = self._path(rulebook_id)
+            temp_path = path.with_suffix(".json.tmp")
+            temp_path.write_text(
+                json.dumps(book, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            temp_path.replace(path)
 
     def get(self, rulebook_id: str, lookup_key: str) -> dict[str, Any] | None:
         if not self.enabled:
@@ -106,19 +110,20 @@ class FaqCache:
         if not self.enabled or not is_cacheable_response(response):
             return
 
-        book = self._load_book(rulebook_id)
-        stored = deepcopy(response)
-        stored.pop("cached", None)
-        stored.pop("cached_at", None)
+        with self._lock:
+            book = self._load_book(rulebook_id)
+            stored = deepcopy(response)
+            stored.pop("cached", None)
+            stored.pop("cached_at", None)
 
-        book["entries"][lookup_key] = {
-            "mode": mode,
-            "label": label,
-            "created_at": datetime.now(UTC).isoformat(),
-            "response": stored,
-        }
-        self._evict_if_needed(book)
-        self._save_book(rulebook_id)
+            book["entries"][lookup_key] = {
+                "mode": mode,
+                "label": label,
+                "created_at": datetime.now(UTC).isoformat(),
+                "response": stored,
+            }
+            self._evict_if_needed(book)
+            self._save_book(rulebook_id)
 
     def _evict_if_needed(self, book: dict[str, Any]) -> None:
         entries: dict[str, Any] = book["entries"]
@@ -134,7 +139,8 @@ class FaqCache:
             del entries[key]
 
     def delete_rulebook(self, rulebook_id: str) -> None:
-        self._books.pop(rulebook_id, None)
+        with self._lock:
+            self._books.pop(rulebook_id, None)
         path = self._path(rulebook_id)
         if path.exists():
             path.unlink()

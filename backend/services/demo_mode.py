@@ -44,10 +44,7 @@ def require_rulebook_access(request: Request, store, rulebook_id: str) -> None:
     if book is None:
         raise HTTPException(status_code=404, detail="Rulebook not found")
     if not book.demo:
-        raise HTTPException(
-            status_code=403,
-            detail={"code": "demo_rulebook_only", "message": DEMO_RULEBOOK_MESSAGE},
-        )
+        raise HTTPException(status_code=404, detail="Rulebook not found")
 
 
 def filter_visible_rulebooks(request: Request, books: list) -> list:

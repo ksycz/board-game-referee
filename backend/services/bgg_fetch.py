@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from config import BGG_API_TOKEN
+import config as app_config
 from services.upload_utils import ensure_pdf_magic, ensure_pdf_size, read_bounded_http_body
 
 BGG_BASE = "https://boardgamegeek.com"
@@ -292,7 +293,8 @@ def _get_text(url: str, *, headers: dict[str, str] | None = None) -> str:
     request = urllib.request.Request(url, headers=merged)
     try:
         with urllib.request.urlopen(request, timeout=45) as response:
-            return response.read().decode("utf-8", errors="replace")
+            data = read_bounded_http_body(response, max_bytes=app_config.BGG_MAX_RESPONSE_BYTES)
+            return data.decode("utf-8", errors="replace")
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
         if exc.code == 401:

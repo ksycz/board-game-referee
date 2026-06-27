@@ -56,19 +56,20 @@ class CitationAgent:
                     if chunk.page == page and quote_lower in chunk.text.lower():
                         grounded = True
                         break
-            elif on_page:
-                grounded = True
 
             entry = {
                 **citation,
                 "valid": on_page and grounded,
                 "retrieved": on_page,
-                "quote_grounded": grounded if quote_lower else on_page,
+                "quote_grounded": grounded,
             }
             if not on_page:
                 issues.append(f"Page {page} was cited but not in retrieved context")
                 entry["issue"] = "page not in retrieval"
-            elif quote_lower and not grounded:
+            elif not quote_lower:
+                issues.append(f"Citation on page {page} is missing a quote")
+                entry["issue"] = "missing quote"
+            elif not grounded:
                 issues.append(f"Quote on page {page} could not be verified in source text")
                 entry["issue"] = "quote not grounded"
             source = _source_for_citation(page, quote, chunks)

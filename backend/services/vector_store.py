@@ -277,33 +277,28 @@ class VectorStore:
             )
 
         if terms:
-            all_result = collection.get(include=["documents", "metadatas"])
-            all_ids = all_result.get("ids") or []
-            all_documents = all_result.get("documents") or []
-            all_metadatas = all_result.get("metadatas") or []
-
-            for chunk_id, text, metadata in zip(
-                all_ids, all_documents, all_metadatas, strict=False
-            ):
-                section_hint = metadata.get("section_hint") or None
-                searchable = _searchable_text(text, section_hint)
+            for chunk_id, chunk in list(merged.items()):
+                section_hint = chunk.section_hint
+                searchable = _searchable_text(chunk.text, section_hint)
                 keyword_score = _keyword_score(searchable, terms)
                 if keyword_score <= 0:
                     continue
-
-                vector_score = merged[chunk_id].score if chunk_id in merged else None
-                if vector_score is not None:
-                    combined = 0.35 * vector_score + 0.65 * keyword_score
-                else:
-                    combined = 0.65 * keyword_score
-
+                vector_score = chunk.score or 0.0
                 merged[chunk_id] = StoredChunk(
                     chunk_id=chunk_id,
-                    page=int(metadata.get("page", 0)),
-                    text=text,
-                    section_hint=metadata.get("section_hint") or None,
-                    score=combined,
+                    page=chunk.page,
+                    text=chunk.text,
+                    section_hint=section_hint,
+                    score=0.35 * vector_score + 0.65 * keyword_score,
                 )
+
+            if len(merged) < top_k:
+                for extra in self.keyword_search(rulebook_id, query, top_k):
+                    if extra.chunk_id in merged:
+                        continue
+                    merged[extra.chunk_id] = extra
+                    if len(merged) >= top_k:
+                        break
 
         ranked = sorted(merged.values(), key=lambda chunk: chunk.score or 0.0, reverse=True)
         return self._apply_substance_boost(ranked[:top_k])

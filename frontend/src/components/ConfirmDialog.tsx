@@ -85,7 +85,10 @@ export function useConfirmDialog() {
       typeof request === "string" ? { message: request } : request;
 
     return new Promise<boolean>((resolve) => {
-      setPending({ ...options, resolve });
+      setPending((current) => {
+        current?.resolve(false);
+        return { ...options, resolve };
+      });
     });
   }, []);
 

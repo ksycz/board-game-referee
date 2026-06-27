@@ -91,6 +91,10 @@ RATE_LIMIT_PREVIEW_WINDOW = float(os.getenv("RATE_LIMIT_PREVIEW_WINDOW", "60"))
 RATE_LIMIT_DEFAULT_MAX = int(os.getenv("RATE_LIMIT_DEFAULT_MAX", "300"))
 RATE_LIMIT_DEFAULT_WINDOW = float(os.getenv("RATE_LIMIT_DEFAULT_WINDOW", "60"))
 
+TRUST_PROXY = _env_bool("TRUST_PROXY", False)
+BGG_MAX_RESPONSE_BYTES = int(os.getenv("BGG_MAX_RESPONSE_BYTES", str(2 * 1024 * 1024)))
+ANTHROPIC_TIMEOUT_SECONDS = float(os.getenv("ANTHROPIC_TIMEOUT_SECONDS", "120"))
+
 
 def ensure_dirs() -> None:
     RULEBOOKS_DIR.mkdir(parents=True, exist_ok=True)

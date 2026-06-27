@@ -12,7 +12,7 @@ from agents.ingestion_agent import IngestionAgent
 from agents.referee_agent import RefereeAgent
 from agents.retrieval_agent import RetrievalAgent
 from config import TOP_K_CHUNKS
-from services.conversation import dispute_retrieval_query, retrieval_query, trim_history
+from services.conversation import dispute_retrieval_query, retrieval_query, sanitize_client_history
 from services.example_questions import example_questions_for_rulebook
 from services.faq_cache import FaqCache, ask_lookup_key, dispute_lookup_key
 from services.game_name import derive_game_name
@@ -200,7 +200,7 @@ class RefereePipeline:
             raise KeyError(f"Rulebook not found: {rulebook_id}")
 
         with _rulebook_query_lock(rulebook_id):
-            prior = trim_history(history or [])
+            prior = sanitize_client_history(history or [])
             if not prior:
                 cached = self.faq_cache.get(rulebook_id, ask_lookup_key(question))
                 if cached:
@@ -251,7 +251,7 @@ class RefereePipeline:
             raise KeyError(f"Rulebook not found: {rulebook_id}")
 
         with _rulebook_query_lock(rulebook_id):
-            prior = trim_history(history or [])
+            prior = sanitize_client_history(history or [])
             if not prior:
                 cached = self.faq_cache.get(
                     rulebook_id,

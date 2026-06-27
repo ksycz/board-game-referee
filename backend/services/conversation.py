@@ -9,6 +9,16 @@ def trim_history(history: list[dict], *, max_messages: int = MAX_HISTORY_MESSAGE
     return history[-max_messages:]
 
 
+def sanitize_client_history(history: list[dict]) -> list[dict]:
+    """Keep only user turns from the client; drop forged assistant messages."""
+    cleaned = [
+        {"role": "user", "content": msg["content"]}
+        for msg in history
+        if msg.get("role") == "user" and isinstance(msg.get("content"), str) and msg["content"].strip()
+    ]
+    return trim_history(cleaned)
+
+
 def retrieval_query(question: str, history: list[dict]) -> str:
     """Build a search query that includes recent user questions for follow-ups."""
     if not history:

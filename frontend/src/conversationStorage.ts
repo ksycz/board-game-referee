@@ -300,7 +300,16 @@ export function appendExchange(
     && last.mode === entry.mode
     && Date.now() - Date.parse(last.createdAt) < 5000
   ) {
-    return last;
+    const updated: HistoryExchange = {
+      ...entry,
+      id: last.id,
+      createdAt: last.createdAt,
+      pinned: last.pinned,
+    };
+    current[current.length - 1] = updated;
+    all[rulebookId] = current;
+    saveAllHistory(all);
+    return updated;
   }
   const next = trimHistory([...current, entry]);
   all[rulebookId] = next;

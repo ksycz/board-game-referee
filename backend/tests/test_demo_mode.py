@@ -145,8 +145,8 @@ def test_demo_blocks_ask_on_private_book(tmp_path, monkeypatch, sample_pdf):
         f"/api/rulebooks/{private_book.id}/ask",
         json={"question": "Can I attack on the first turn?"},
     )
-    assert res.status_code == 403
-    assert res.json()["detail"]["code"] == "demo_rulebook_only"
+    assert res.status_code == 404
+    assert res.json()["detail"] == "Rulebook not found"
 
 
 def test_demo_returns_404_for_unknown_rulebook(tmp_path, monkeypatch):
