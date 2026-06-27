@@ -20,7 +20,7 @@ Push when **all** of the following are true:
 
 ## Required checks before push
 
-Match `.github/workflows/ci.yml`:
+Match `.github/workflows/ci.yml` and `.github/workflows/e2e.yml`:
 
 **Always run (frontend touched or repo-wide change):**
 ```bash
@@ -36,7 +36,7 @@ cd backend && python -m venv .venv && source .venv/bin/activate && pip install -
 ```bash
 cd frontend && npm run test:e2e
 ```
-Use `scripts/e2e-backend.sh` if the E2E workflow needs a running backend.
+E2E runs in the dedicated `e2e.yml` workflow (Playwright `--with-deps`, sample PDF, backend script). Do not duplicate it in `ci.yml`.
 
 Skip E2E only for trivial CSS/copy tweaks with no behavioral change.
 
