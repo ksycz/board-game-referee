@@ -72,6 +72,7 @@ import {
 } from "./app/utils";
 import { AppBrandHeader } from "./components/AppBrandHeader";
 import { AppNotice, RulebookHealthNotice } from "./components/AppNotices";
+import { useConfirmDialog } from "./components/ConfirmDialog";
 import { QuickSearchPanel } from "./components/QuickSearch";
 import { RefereeAnswer } from "./components/RefereeAnswer";
 
@@ -147,6 +148,8 @@ export default function App({
     }
     scheduleScrollContainerToChildTop(container, target);
   }, []);
+
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
 
   const effectiveSidebarCollapsed = isDesktop && sidebarCollapsed;
 
@@ -560,12 +563,14 @@ export default function App({
     });
   }
 
-  function clearRecentExchanges(rulebookId: string, name: string) {
-    if (
-      !confirm(
-        `Clear all recent rulings for "${name}"? This cannot be undone.`,
-      )
-    ) {
+  async function clearRecentExchanges(rulebookId: string, name: string) {
+    const confirmed = await confirm({
+      title: "Clear recent rulings?",
+      message: `Clear all recent rulings for "${name}"? This cannot be undone.`,
+      confirmLabel: "Clear",
+      tone: "danger",
+    });
+    if (!confirmed) {
       return;
     }
     clearHistory(rulebookId);
@@ -959,11 +964,12 @@ export default function App({
   }
 
   async function handleReindex(id: string, name: string) {
-    if (
-      !confirm(
-        `Re-scan "${name}" from the stored PDF? This rebuilds the search index and clears cached answers.`,
-      )
-    ) {
+    const confirmed = await confirm({
+      title: "Re-scan rulebook?",
+      message: `Re-scan "${name}" from the stored PDF? This rebuilds the search index and clears cached answers.`,
+      confirmLabel: "Re-scan",
+    });
+    if (!confirmed) {
       return;
     }
     setUploading(true);
@@ -994,7 +1000,15 @@ export default function App({
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Delete this rulebook?")) return;
+    const confirmed = await confirm({
+      title: "Delete rulebook?",
+      message: "Delete this rulebook?",
+      confirmLabel: "Delete",
+      tone: "danger",
+    });
+    if (!confirmed) {
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -1016,11 +1030,13 @@ export default function App({
     if (rulebooks.length === 0) {
       return;
     }
-    if (
-      !confirm(
-        `Delete all ${rulebooks.length} rulebook${rulebooks.length === 1 ? "" : "s"} from your library? This cannot be undone.`,
-      )
-    ) {
+    const confirmed = await confirm({
+      title: "Delete all rulebooks?",
+      message: `Delete all ${rulebooks.length} rulebook${rulebooks.length === 1 ? "" : "s"} from your library? This cannot be undone.`,
+      confirmLabel: "Delete all",
+      tone: "danger",
+    });
+    if (!confirmed) {
       return;
     }
     setLoading(true);
@@ -1412,7 +1428,7 @@ export default function App({
               <button
                 type="button"
                 className="book-list-toggle"
-                onClick={() => clearRecentExchanges(selected.id, selected.name)}
+                onClick={() => void clearRecentExchanges(selected.id, selected.name)}
               >
                 Clear all
               </button>
@@ -1777,6 +1793,7 @@ export default function App({
         </main>
       </div>
       <div className="table-rail table-rail-bottom" aria-hidden="true" />
+      {confirmDialog}
     </div>
   );
 }

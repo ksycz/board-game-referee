@@ -1788,6 +1788,102 @@ html.page-preview-lightbox-open body {
   overflow: hidden;
 }
 
+html.confirm-dialog-open,
+html.confirm-dialog-open body {
+  overflow: hidden;
+}
+
+.confirm-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 240;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.confirm-dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  padding: 0;
+  background: rgb(12 8 10 / 0.82);
+  cursor: pointer;
+  backdrop-filter: blur(3px);
+}
+
+.confirm-dialog-panel {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 24rem);
+  padding: 1.15rem 1.2rem 1.05rem;
+  border-color: var(--border-gold);
+  box-shadow: var(--shadow-card);
+}
+
+.confirm-dialog-title {
+  margin: 0 0 0.55rem;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.confirm-dialog-message {
+  margin: 0;
+  font-size: 0.94rem;
+  line-height: 1.55;
+  color: var(--ink-muted);
+}
+
+.confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  margin-top: 1.1rem;
+}
+
+.confirm-dialog-btn {
+  min-height: 2.35rem;
+  padding: 0.45rem 0.95rem;
+  border-radius: var(--radius-pill);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease, filter 0.12s ease, transform 0.12s ease;
+}
+
+.confirm-dialog-btn-cancel {
+  border: 1px solid var(--border);
+  background: var(--surface-sunken);
+  color: var(--ink-muted);
+}
+
+.confirm-dialog-btn-cancel:hover {
+  background: var(--surface-muted);
+  border-color: var(--border-gold);
+  color: var(--ink);
+}
+
+.confirm-dialog-btn-confirm {
+  border: 1px solid rgb(255 255 255 / 0.1);
+  background: linear-gradient(135deg, var(--accent-glow), var(--accent-strong));
+  color: #1a1008;
+  box-shadow: var(--glow-gold), 0 2px 8px rgb(24 12 16 / 0.22);
+}
+
+.confirm-dialog-btn-confirm:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+.confirm-dialog-btn-danger {
+  background: linear-gradient(135deg, #b85858, var(--danger));
+  box-shadow: 0 0 16px rgb(176 80 80 / 0.2), 0 2px 8px rgb(24 12 16 / 0.22);
+}
+
 .source-panel-preview-unavailable {
   display: flex;
   align-items: center;
