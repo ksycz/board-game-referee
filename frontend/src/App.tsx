@@ -15,6 +15,7 @@ import {
   formatFileSize,
   isDuplicateRulebookError,
   listRulebooks,
+  importBggRulebook,
   lookupBggRulebooks,
   pinRulebook,
   uploadProgressPercent,
@@ -112,7 +113,7 @@ export default function App({
   const [bggLookupLoading, setBggLookupLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [ingestSource, setIngestSource] = useState<"upload" | "reindex">("upload");
+  const [ingestSource, setIngestSource] = useState<"upload" | "bgg" | "reindex">("upload");
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [error, setError] = useState<AppError | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -390,6 +391,10 @@ export default function App({
     const onKeyDown = (event: KeyboardEvent) => {
       const isEscape = event.key === "Escape" || event.code === "Escape";
       if (isEscape && !event.isComposing) {
+        if (document.querySelector(".confirm-dialog")) {
+          return;
+        }
+
         let handled = false;
 
         if (document.querySelector(".page-preview-lightbox")) {
@@ -712,6 +717,44 @@ export default function App({
       setError(toAppError(err));
     } finally {
       setBggLookupLoading(false);
+    }
+  }
+
+  async function handleBggImport(file: BggRulebookFile) {
+    if (uploading) {
+      return;
+    }
+    setUploading(true);
+    setIngestSource("bgg");
+    setUploadProgress({ phase: "starting", page: 0, total_pages: 0 });
+    setError(null);
+    setInfo(null);
+    setUploadHealth(null);
+    try {
+      const upload = await importBggRulebook(file, uploadName || undefined, (progress) => {
+        setUploadProgress(progress);
+      });
+      setUploadName("");
+      await ingestUploadedRulebook(upload);
+    } catch (err) {
+      if (isDuplicateRulebookError(err)) {
+        setUploadName("");
+        setSelectedId(err.rulebook.id);
+        setExamples((current) => ({
+          ...current,
+          [err.rulebook.id]: err.example_questions,
+        }));
+        await refresh();
+        setInfo(
+          `"${err.rulebook.name}" is already in your library — opened the existing copy. `
+          + "Delete it first if you want to scan the PDF again.",
+        );
+      } else {
+        setError(toAppError(err));
+      }
+    } finally {
+      setUploading(false);
+      setUploadProgress(null);
     }
   }
 
@@ -1108,7 +1151,11 @@ export default function App({
             <div className="notice-banner info ingest-progress-banner" aria-live="polite">
               <div className="notice-banner-copy">
                 <p className="notice-banner-title">
-                  {ingestSource === "reindex" ? "Re-scanning rulebook" : "Processing rulebook"}
+                  {ingestSource === "reindex"
+                    ? "Re-scanning rulebook"
+                    : ingestSource === "bgg"
+                      ? "Importing from BoardGameGeek"
+                      : "Processing rulebook"}
                 </p>
                 <p>{formatUploadProgressMessage(uploadProgress, ingestSource)}</p>
                 <div
@@ -1228,6 +1275,18 @@ export default function App({
                   placeholder="boardgamegeek.com/boardgame/…"
                   value={bggUrl}
                   onChange={(e) => setBggUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (
+                      e.key === "Enter"
+                      && !e.nativeEvent.isComposing
+                      && bggUrl.trim()
+                      && !uploading
+                      && !bggLookupLoading
+                    ) {
+                      e.preventDefault();
+                      void handleBggLookup();
+                    }
+                  }}
                   disabled={uploading || bggLookupLoading}
                 />
                 <button
@@ -1244,47 +1303,32 @@ export default function App({
               {bggCandidates && bggCandidates.length > 0 && (
                 <>
                   <p className="bgg-import-hint">
-                    BoardGameGeek blocks automatic downloads. Open a file, save the PDF in your
-                    browser, then upload it with Choose rulebook PDF above.
+                    Pick a file to import. If BoardGameGeek blocks the download, use the link in
+                    the banner to open the file and upload it manually.
                   </p>
                   <ul className="bgg-file-list">
                     {bggCandidates.map((file) => (
                       <li key={file.file_id}>
-                        <a
+                        <button
+                          type="button"
                           className="bgg-file-btn"
-                          href={file.bgg_url}
-                          target="_blank"
-                          rel="noreferrer"
+                          disabled={uploading}
+                          onClick={() => {
+                            void handleBggImport(file);
+                          }}
                         >
                           <span className="bgg-file-title">{file.title}</span>
                           <span className="bgg-file-meta">
                             {file.filename} · {formatFileSize(file.size)}
                             {file.votes > 0 ? ` · ${file.votes} thumbs` : ""}
                           </span>
-                        </a>
+                        </button>
                       </li>
                     ))}
                   </ul>
                 </>
               )}
             </div>
-
-            {uploading && uploadProgress && (
-              <div className="upload-progress" role="status" aria-live="polite">
-                <p className="upload-progress-label">
-                  {formatUploadProgressMessage(uploadProgress, ingestSource)}
-                </p>
-                <div
-                  className="upload-progress-track"
-                  aria-hidden="true"
-                >
-                  <div
-                    className="upload-progress-bar"
-                    style={{ width: `${uploadProgressPercent(uploadProgress)}%` }}
-                  />
-                </div>
-              </div>
-            )}
           </section>
           )}
 
@@ -1670,6 +1714,7 @@ export default function App({
                           activeClarification != null
                           && i === messages.length - 1
                         }
+                        onNotify={setInfo}
                       />
                     </div>
                   )

@@ -14,11 +14,13 @@ export function RefereeAnswer({
   data,
   overlayDismissTick,
   awaitingClarification = false,
+  onNotify,
 }: {
   rulebookId: string;
   data: AskResponse;
   overlayDismissTick: number;
   awaitingClarification?: boolean;
+  onNotify?: (message: string) => void;
 }) {
   const { ruling } = data;
   const citation_check = data.citation_check ?? { all_valid: true, issues: [], citations: [] };
@@ -89,8 +91,8 @@ export function RefereeAnswer({
 
       {!needsInput && (
         <div className="ruling-actions">
-          <CopyShareRuling data={data} />
-          <RulingFeedback rulebookId={rulebookId} data={data} />
+          <CopyShareRuling data={data} onNotify={onNotify} />
+          <RulingFeedback rulebookId={rulebookId} data={data} onNotify={onNotify} />
         </div>
       )}
 
@@ -124,7 +126,13 @@ function ConfidenceHint({ hint }: { hint: ConfidenceHintInfo }) {
   );
 }
 
-function CopyShareRuling({ data }: { data: AskResponse }) {
+function CopyShareRuling({
+  data,
+  onNotify,
+}: {
+  data: AskResponse;
+  onNotify?: (message: string) => void;
+}) {
   const [status, setStatus] = useState<"idle" | "copied" | "shared">("idle");
   const shareText = formatRulingShareText(data);
   const canNativeShare = typeof navigator !== "undefined" && typeof navigator.share === "function";
@@ -135,7 +143,7 @@ function CopyShareRuling({ data }: { data: AskResponse }) {
       setStatus("copied");
       window.setTimeout(() => setStatus("idle"), 2000);
     } catch {
-      // Clipboard may be blocked without a secure context or permission.
+      onNotify?.("Could not copy — try selecting the text manually.");
     }
   }
 
@@ -182,7 +190,15 @@ function CopyShareRuling({ data }: { data: AskResponse }) {
   );
 }
 
-function RulingFeedback({ rulebookId, data }: { rulebookId: string; data: AskResponse }) {
+function RulingFeedback({
+  rulebookId,
+  data,
+  onNotify,
+}: {
+  rulebookId: string;
+  data: AskResponse;
+  onNotify?: (message: string) => void;
+}) {
   const [submitted, setSubmitted] = useState<"up" | "down" | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -207,7 +223,7 @@ function RulingFeedback({ rulebookId, data }: { rulebookId: string; data: AskRes
       });
       setSubmitted(helpful ? "up" : "down");
     } catch {
-      // Non-fatal: ruling still stands if feedback fails to save.
+      onNotify?.("Could not save feedback — try again in a moment.");
     } finally {
       setPending(false);
     }

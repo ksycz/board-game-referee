@@ -10,6 +10,7 @@ from dataclasses import asdict
 from typing import Any
 
 from agents.pipeline import RefereePipeline
+from services.bgg_fetch import BggDownloadError, BggError, download_rulebook_pdf
 from services.rulebook_store import DuplicateRulebookError
 
 logger = logging.getLogger(__name__)
@@ -75,6 +76,15 @@ async def stream_rulebook_upload(
                     "example_questions": pipeline.example_questions(existing.id),
                 }
             )
+        except BggDownloadError as exc:
+            await progress_queue.put(
+                {
+                    "type": "error",
+                    "message": str(exc),
+                    "code": "bgg_manual_download",
+                    "bgg_url": exc.bgg_url,
+                }
+            )
         except Exception as exc:
             logger.exception("Rulebook upload failed")
             await progress_queue.put({"type": "error", "message": stream_error_message(exc)})
@@ -92,3 +102,53 @@ async def stream_rulebook_upload(
             yield _sse(event_type, item)
     finally:
         await upload_task
+
+
+async def stream_bgg_rulebook_import(
+    pipeline: RefereePipeline,
+    *,
+    file_id: str,
+    bgg_url: str,
+    filename_hint: str,
+    display_name: str | None,
+    stored_name: str,
+) -> AsyncIterator[str]:
+    """Download a BGG PDF, then stream upload progress events."""
+    loop = asyncio.get_running_loop()
+    yield _sse("progress", {"phase": "starting", "page": 0, "total_pages": 0})
+
+    try:
+        pdf_bytes, original_filename = await loop.run_in_executor(
+            None,
+            lambda: download_rulebook_pdf(
+                file_id,
+                filename_hint=filename_hint,
+                bgg_url=bgg_url,
+            ),
+        )
+    except BggDownloadError as exc:
+        yield _sse(
+            "error",
+            {
+                "message": str(exc),
+                "code": "bgg_manual_download",
+                "bgg_url": exc.bgg_url,
+            },
+        )
+        return
+    except BggError as exc:
+        yield _sse("error", {"message": str(exc)})
+        return
+    except Exception as exc:
+        logger.exception("BGG rulebook download failed")
+        yield _sse("error", {"message": GENERIC_STREAM_ERROR})
+        return
+
+    async for event in stream_rulebook_upload(
+        pipeline,
+        display_name=display_name,
+        stored_name=stored_name,
+        pdf_bytes=pdf_bytes,
+        original_filename=original_filename,
+    ):
+        yield event

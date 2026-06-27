@@ -13,6 +13,13 @@ export function toAppError(err: unknown): AppError {
     if (err.code === "unauthorized") {
       return { message: err.message, code: "unauthorized" };
     }
+    if (err.code === "bgg_manual_download") {
+      return {
+        message: err.message,
+        code: "bgg_manual_download",
+        bggUrl: err.bggUrl,
+      };
+    }
   }
   return { message: err instanceof Error ? err.message : String(err) };
 }

@@ -75,6 +75,7 @@ def rate_limit_rule_for_request(path: str, method: str) -> RateLimitRule | None:
         path in ("/api/rulebooks", "/api/rulebooks/upload-stream")
         or path.endswith("/reindex-stream")
         or path.endswith("/bgg/lookup")
+        or path.endswith("/bgg/import-stream")
     ):
         return RateLimitRule(
             "expensive",

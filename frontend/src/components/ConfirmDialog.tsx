@@ -26,10 +26,44 @@ function ConfirmDialogView({
 }) {
   const titleId = useId();
   const messageId = useId();
+  const panelRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     cancelRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) {
+      return;
+    }
+
+    const focusable = panel.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    if (focusable.length === 0) {
+      return;
+    }
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") {
+        return;
+      }
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    panel.addEventListener("keydown", onKeyDown);
+    return () => panel.removeEventListener("keydown", onKeyDown);
   }, []);
 
   return (
@@ -41,6 +75,7 @@ function ConfirmDialogView({
         onClick={onCancel}
       />
       <div
+        ref={panelRef}
         className="confirm-dialog-panel panel"
         role="alertdialog"
         aria-modal="true"
@@ -108,6 +143,7 @@ export function useConfirmDialog() {
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        event.stopPropagation();
         close(false);
       }
     };

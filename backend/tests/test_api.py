@@ -330,6 +330,30 @@ def test_bgg_lookup_endpoint(client, monkeypatch):
     assert body["files"][0]["file_id"] == "99"
 
 
+def test_bgg_import_stream_manual_download_error(client, monkeypatch):
+    from services.bgg_fetch import BggDownloadError
+
+    def fail_download(*_args, **_kwargs):
+        raise BggDownloadError(
+            "BoardGameGeek blocked automatic download.",
+            bgg_url="https://boardgamegeek.com/filepage/12/official-rulebook",
+        )
+
+    monkeypatch.setattr("services.upload_stream.download_rulebook_pdf", fail_download)
+
+    res = client.post(
+        "/api/rulebooks/bgg/import-stream",
+        json={
+            "file_id": "99",
+            "bgg_url": "https://boardgamegeek.com/filepage/12/official-rulebook",
+            "filename": "catan-rules.pdf",
+        },
+    )
+    assert res.status_code == 200
+    assert "bgg_manual_download" in res.text
+    assert "BoardGameGeek blocked automatic download." in res.text
+
+
 def test_dispute_rejects_short_arguments(client, sample_pdf):
     with sample_pdf.open("rb") as f:
         upload = client.post(

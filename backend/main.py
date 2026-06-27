@@ -29,10 +29,10 @@ from errors import RateLimitError
 from services.frontend_static import resolve_frontend_asset
 from services.http_errors import GENERIC_BGG_LOOKUP_ERROR, server_error
 from services.pdf_parser import ensure_tesseract_path
-from services.bgg_fetch import BggError, lookup_rulebooks
+from services.bgg_fetch import BggDownloadError, BggError, lookup_rulebooks
 from services.rulebook_store import DuplicateRulebookError
 from services.reindex_stream import stream_rulebook_reindex
-from services.upload_stream import stream_rulebook_upload
+from services.upload_stream import stream_bgg_rulebook_import, stream_rulebook_upload
 from services.upload_utils import read_bounded_pdf_upload, safe_stored_filename
 from services.api_auth import (
     AUTH_EXEMPT_PATHS,
@@ -174,6 +174,13 @@ class BggLookupRequest(BaseModel):
     url: str = Field(min_length=8, max_length=500)
 
 
+class BggImportRequest(BaseModel):
+    file_id: str = Field(min_length=1, max_length=32, pattern=r"^\d+$")
+    bgg_url: str = Field(min_length=8, max_length=500)
+    filename: str = Field(min_length=1, max_length=255)
+    name: str | None = Field(default=None, max_length=200)
+
+
 def _safe_filename(name: str) -> str:
     return safe_stored_filename(name)
 
@@ -227,11 +234,42 @@ def bgg_lookup(request: Request, body: BggLookupRequest):
     require_full_access(request)
     try:
         return lookup_rulebooks(body.url)
+    except BggDownloadError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "bgg_manual_download",
+                "message": str(exc),
+                "bgg_url": exc.bgg_url,
+            },
+        ) from exc
     except BggError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("BGG lookup failed")
         raise HTTPException(status_code=400, detail=GENERIC_BGG_LOOKUP_ERROR) from exc
+
+
+@app.post("/api/rulebooks/bgg/import-stream")
+async def bgg_import_stream(request: Request, body: BggImportRequest):
+    require_full_access(request)
+    display_name = (body.name or "").strip() or None
+    stored_name = f"{uuid.uuid4()}_{_safe_filename(body.filename)}"
+    return StreamingResponse(
+        stream_bgg_rulebook_import(
+            pipeline,
+            file_id=body.file_id,
+            bgg_url=body.bgg_url,
+            filename_hint=body.filename,
+            display_name=display_name,
+            stored_name=stored_name,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/api/config")
