@@ -924,8 +924,8 @@ body::after {
 }
 
 .chat-dispute-thread .messages {
-  flex: 1 1 auto;
-  min-height: 14rem;
+  flex: 1 1 0;
+  min-height: 0;
 }
 
 .chat-dispute-thread .bubble.referee {
@@ -2909,7 +2909,7 @@ details pre {
   }
 
   .chat-dispute-thread .messages {
-    min-height: 42vh;
+    min-height: 0;
   }
 
   .chat-dispute-thread .chat-composer {

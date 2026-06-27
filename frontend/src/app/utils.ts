@@ -1,6 +1,6 @@
 import { ApiError, type AskResponse, type HistoryMessage, type Rulebook } from "../api";
 import { trimThread, type RecentExchange } from "../conversationStorage";
-import type { AppError, ClarificationContext, Message } from "./types";
+import type { AppError, ClarificationContext, Message, ChatMode } from "./types";
 
 export function toAppError(err: unknown): AppError {
   if (err instanceof ApiError) {
@@ -22,6 +22,39 @@ export function toAppError(err: unknown): AppError {
     }
   }
   return { message: err instanceof Error ? err.message : String(err) };
+}
+
+export type IndexedMessage = { message: Message; index: number };
+
+export function visibleMessagesForChatMode(
+  messages: Message[],
+  chatMode: ChatMode,
+): IndexedMessage[] {
+  if (chatMode === "search") {
+    return [];
+  }
+
+  const visible: IndexedMessage[] = [];
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index];
+    if (message.role === "user") {
+      if (chatMode === "ask") {
+        visible.push({ message, index });
+      }
+      continue;
+    }
+    if (message.role === "dispute") {
+      if (chatMode === "dispute") {
+        visible.push({ message, index });
+      }
+      continue;
+    }
+    const exchangeMode = message.data.mode === "dispute" ? "dispute" : "ask";
+    if (exchangeMode === chatMode) {
+      visible.push({ message, index });
+    }
+  }
+  return visible;
 }
 
 function matchesPromptMessage(left: Message, right: Message): boolean {

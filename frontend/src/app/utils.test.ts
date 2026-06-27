@@ -8,6 +8,7 @@ import {
   getPendingClarification,
   sortRulebooks,
   toAppError,
+  visibleMessagesForChatMode,
   visibleRulebooks,
 } from "./utils";
 
@@ -32,6 +33,41 @@ function askResponse(overrides: Partial<AskResponse["ruling"]> = {}): AskRespons
     response_id: "resp-1",
   };
 }
+
+describe("visibleMessagesForChatMode", () => {
+  it("shows only ask exchanges in ask mode", () => {
+    const messages: Message[] = [
+      { role: "user", text: "Can I attack?" },
+      {
+        role: "referee",
+        data: askResponse(),
+      },
+    ];
+    expect(visibleMessagesForChatMode(messages, "ask")).toHaveLength(2);
+    expect(visibleMessagesForChatMode(messages, "dispute")).toHaveLength(0);
+  });
+
+  it("hides ask history when viewing dispute mode", () => {
+    const messages: Message[] = [
+      { role: "user", text: "Can I attack?" },
+      { role: "referee", data: askResponse() },
+      {
+        role: "dispute",
+        situation: "Who wins?",
+        playerA: "Me",
+        playerB: "You",
+      },
+      {
+        role: "referee",
+        data: { ...askResponse({ ruling: "Player A." }), mode: "dispute" },
+      },
+    ];
+    const disputeView = visibleMessagesForChatMode(messages, "dispute");
+    expect(disputeView).toHaveLength(2);
+    expect(disputeView[0].message.role).toBe("dispute");
+    expect(visibleMessagesForChatMode(messages, "ask")).toHaveLength(2);
+  });
+});
 
 describe("toAppError", () => {
   it("maps rate limit and BGG manual download codes", () => {

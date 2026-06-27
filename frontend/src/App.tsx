@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import {
   BggRulebookFile,
@@ -68,6 +68,7 @@ import {
   scheduleScrollContainerToChildTop,
   sortRulebooks,
   toAppError,
+  visibleMessagesForChatMode,
   visibleRecentExchanges,
   visibleRulebooks,
 } from "./app/utils";
@@ -188,11 +189,22 @@ export default function App({
     ? 0
     : Math.max(0, rulebooks.length - SIDEBAR_LIST_PREVIEW_LIMIT);
 
-  const messages = selectedId ? threads[selectedId] ?? [] : [];
+  const messages = useMemo(
+    () => (selectedId ? threads[selectedId] ?? [] : []),
+    [selectedId, threads],
+  );
   const clarificationOverride = selectedId && selectedId in clarifications
     ? clarifications[selectedId]
     : undefined;
-  const activeClarification = getActiveClarification(messages, clarificationOverride);
+  const pendingClarification = getActiveClarification(messages, clarificationOverride);
+  const activeClarification =
+    pendingClarification && (pendingClarification.mode ?? "ask") === chatMode
+      ? pendingClarification
+      : null;
+  const visibleMessages = useMemo(
+    () => visibleMessagesForChatMode(messages, chatMode),
+    [messages, chatMode],
+  );
   const exampleQuestions = selectedId ? examples[selectedId] ?? [] : [];
   const recentExchanges = selectedId ? listRecentExchanges(history[selectedId] ?? []) : [];
   const displayedRecentExchanges = visibleRecentExchanges(recentExchanges, showAllRecentExchanges);
@@ -348,6 +360,16 @@ export default function App({
   }, [selectedId, messages.length]);
 
   useEffect(() => {
+    if (chatMode === "dispute" && visibleMessagesForChatMode(messages, "dispute").length === 0) {
+      setDisputeFormExpanded(true);
+    }
+  }, [chatMode, messages, selectedId]);
+
+  useEffect(() => {
+    messagesContainerRef.current?.scrollTo({ top: 0 });
+  }, [chatMode, selectedId]);
+
+  useEffect(() => {
     loadingRef.current = false;
     activeRequestRulebookRef.current = null;
     setLoading(false);
@@ -487,11 +509,12 @@ export default function App({
     }
   }, [chatMode, selectedId]);
 
-  const lastMessageIndex = messages.length > 0 ? messages.length - 1 : -1;
-  const lastMessageKey = lastMessageIndex >= 0
-    ? messageDomKey(messages[lastMessageIndex], lastMessageIndex)
+  const lastVisible = visibleMessages.at(-1);
+  const lastMessageIndex = lastVisible?.index ?? -1;
+  const lastMessageKey = lastVisible
+    ? messageDomKey(lastVisible.message, lastVisible.index)
     : "";
-  const lastMessageRole = lastMessageIndex >= 0 ? messages[lastMessageIndex]?.role : null;
+  const lastMessageRole = lastVisible?.message.role ?? null;
 
   useLayoutEffect(() => {
     const container = messagesContainerRef.current;
@@ -510,7 +533,7 @@ export default function App({
     if (loading) {
       container.scrollTop = container.scrollHeight;
     }
-  }, [lastMessageKey, lastMessageIndex, lastMessageRole, loading, selectedId]);
+  }, [lastMessageKey, lastMessageIndex, lastMessageRole, loading, selectedId, chatMode]);
 
   useEffect(() => {
     if (!info) {
@@ -1507,11 +1530,11 @@ export default function App({
 
         <main
           className={`chat panel${
-            selected && chatMode === "dispute" && messages.length === 0 && !loading
+            selected && chatMode === "dispute" && visibleMessages.length === 0 && !loading
               ? " chat-dispute-idle"
               : ""
           }${
-            selected && chatMode === "dispute" && messages.length > 0
+            selected && chatMode === "dispute" && visibleMessages.length > 0
               ? " chat-dispute-thread"
               : ""
           }`}
@@ -1652,7 +1675,7 @@ export default function App({
                   />
                 ) : (
                   <>
-                {messages.length === 0 && exampleQuestions.length > 0 && chatMode === "ask" && (
+                {visibleMessages.length === 0 && exampleQuestions.length > 0 && chatMode === "ask" && (
                   <div className="example-questions">
                     <p className="example-questions-label">Try asking</p>
                     <p className="example-questions-hint">Tap a question to ask the referee.</p>
@@ -1673,13 +1696,13 @@ export default function App({
                     </div>
                   </div>
                 )}
-                {messages.length === 0 && exampleQuestions.length === 0 && chatMode === "ask" && (
+                {visibleMessages.length === 0 && exampleQuestions.length === 0 && chatMode === "ask" && (
                   <div className="hint">
                     Try: &ldquo;Can I play this card during another player&apos;s turn?&rdquo;
                     Follow up with: &ldquo;What about on the first turn?&rdquo;
                   </div>
                 )}
-                {messages.map((msg, i) =>
+                {visibleMessages.map(({ message: msg, index: i }) =>
                   msg.role === "user" ? (
                     <div key={messageDomKey(msg, i)} id={`message-${i}`} className="message-wrap user">
                       <span className="message-label">You</span>
@@ -1713,6 +1736,7 @@ export default function App({
                         awaitingClarification={
                           activeClarification != null
                           && i === messages.length - 1
+                          && msg.role === "referee"
                         }
                         onNotify={setInfo}
                       />
