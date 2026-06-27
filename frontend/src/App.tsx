@@ -64,6 +64,7 @@ import {
   loadSidebarCollapsed,
   messageDomKey,
   saveSidebarCollapsed,
+  scrollContainerToChildTop,
   sortRulebooks,
   toAppError,
   visibleRecentExchanges,
@@ -460,17 +461,38 @@ export default function App({
     }
   }, [chatMode, selectedId]);
 
-  const lastMessageKey = messages.length > 0
-    ? messageDomKey(messages[messages.length - 1], messages.length - 1)
+  const lastMessageIndex = messages.length > 0 ? messages.length - 1 : -1;
+  const lastMessageKey = lastMessageIndex >= 0
+    ? messageDomKey(messages[lastMessageIndex], lastMessageIndex)
     : "";
+  const lastMessageRole = lastMessageIndex >= 0 ? messages[lastMessageIndex]?.role : null;
 
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) {
       return;
     }
-    container.scrollTop = container.scrollHeight;
-  }, [lastMessageKey, loading, selectedId]);
+
+    const scroll = () => {
+      if (loading) {
+        container.scrollTop = container.scrollHeight;
+        return;
+      }
+
+      if (lastMessageRole === "referee" && lastMessageIndex >= 0) {
+        const target = container.querySelector<HTMLElement>(`#message-${lastMessageIndex}`);
+        if (target) {
+          scrollContainerToChildTop(container, target);
+          return;
+        }
+      }
+
+      container.scrollTop = container.scrollHeight;
+    };
+
+    const frame = window.requestAnimationFrame(scroll);
+    return () => window.cancelAnimationFrame(frame);
+  }, [lastMessageKey, lastMessageIndex, lastMessageRole, loading, selectedId]);
 
   useEffect(() => {
     if (!info) {

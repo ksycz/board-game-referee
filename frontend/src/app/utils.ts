@@ -215,3 +215,10 @@ export function isEditableTarget(target: EventTarget | null): boolean {
   }
   return target.isContentEditable;
 }
+
+export function scrollContainerToChildTop(container: HTMLElement, child: HTMLElement): void {
+  const top = container.scrollTop
+    + child.getBoundingClientRect().top
+    - container.getBoundingClientRect().top;
+  container.scrollTop = Math.max(0, top);
+}
