@@ -17,7 +17,7 @@ test("searches indexed passages without calling the referee", async ({ page }) =
 
   await page.getByRole("tab", { name: "Search" }).click();
   await page.getByPlaceholder("e.g. setup, first turn, tie breaker").fill("first turn");
-  await page.getByRole("button", { name: "Search" }).click();
+  await page.locator(".quick-search-form").getByRole("button", { name: "Search" }).click();
 
   const hit = page.locator(".quick-search-hit").first();
   await expect(hit).toBeVisible({ timeout: 30_000 });

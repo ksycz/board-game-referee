@@ -20,7 +20,9 @@ test("asks for clarification, accepts a reply, and hides the prompt on Search ta
 
   const prompt = page.getByText("Referee needs one detail");
   await expect(prompt).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByText("How many players are at the table?")).toBeVisible();
+  await expect(page.locator(".clarification-prompt-question")).toHaveText(
+    "How many players are at the table?",
+  );
   await expect(page.getByPlaceholder("Your answer…")).toBeVisible();
 
   await page.getByRole("tab", { name: "Search" }).click();

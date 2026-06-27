@@ -18,20 +18,27 @@ test("delete rulebook and clear-all require confirmation", async ({ page }) => {
 
   await page.getByRole("button", { name: "Delete E2E Delete Game" }).click();
   await expect(page.getByRole("alertdialog")).toBeVisible();
-  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByRole("heading", { name: "E2E Delete Game" })).toBeVisible();
 
   await page.getByRole("button", { name: "Delete E2E Delete Game" }).click();
-  await page.getByRole("button", { name: "Delete" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Delete" }).click();
   await expect(page.getByText("No rulebooks yet — add one to start.")).toBeVisible();
 
   await uploadSampleRulebook(page, "E2E Clear All Game");
-  await page.getByRole("button", { name: "Clear all" }).first().click();
-  await expect(page.getByRole("alertdialog")).toContainText("Delete all");
-  await page.getByRole("button", { name: "Cancel" }).click();
+
+  const clearLibrary = page
+    .getByRole("complementary")
+    .getByRole("button", { name: "Clear all", exact: true });
+  await expect(clearLibrary).toBeEnabled();
+  await clearLibrary.click();
+  const clearAllDialog = page.getByRole("alertdialog");
+  await expect(clearAllDialog).toBeVisible();
+  await expect(clearAllDialog).toContainText("Delete all rulebook");
+  await clearAllDialog.getByRole("button", { name: "Cancel" }).click();
   await expect(page.getByRole("heading", { name: "E2E Clear All Game" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Clear all" }).first().click();
-  await page.getByRole("button", { name: "Delete all" }).click();
+  await clearLibrary.click();
+  await clearAllDialog.getByRole("button", { name: "Delete all" }).click();
   await expect(page.getByText("No rulebooks yet — add one to start.")).toBeVisible();
 });
