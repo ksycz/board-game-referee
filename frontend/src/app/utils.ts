@@ -217,8 +217,23 @@ export function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 export function scrollContainerToChildTop(container: HTMLElement, child: HTMLElement): void {
-  const top = container.scrollTop
-    + child.getBoundingClientRect().top
-    - container.getBoundingClientRect().top;
+  const top = child.getBoundingClientRect().top
+    - container.getBoundingClientRect().top
+    + container.scrollTop;
   container.scrollTop = Math.max(0, top);
+}
+
+export function scheduleScrollContainerToChildTop(
+  container: HTMLElement,
+  child: HTMLElement,
+): () => void {
+  const run = () => scrollContainerToChildTop(container, child);
+
+  run();
+  const frame1 = window.requestAnimationFrame(() => {
+    run();
+    window.requestAnimationFrame(run);
+  });
+
+  return () => window.cancelAnimationFrame(frame1);
 }

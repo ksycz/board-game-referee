@@ -1243,6 +1243,7 @@ body::after {
 .message-wrap.referee {
   align-self: flex-start;
   align-items: flex-start;
+  scroll-margin-top: 0.25rem;
 }
 
 .loading-bubble {

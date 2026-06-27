@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import {
   BggRulebookFile,
@@ -64,7 +64,7 @@ import {
   loadSidebarCollapsed,
   messageDomKey,
   saveSidebarCollapsed,
-  scrollContainerToChildTop,
+  scheduleScrollContainerToChildTop,
   sortRulebooks,
   toAppError,
   visibleRecentExchanges,
@@ -135,6 +135,18 @@ export default function App({
   const loadingRef = useRef(false);
   const activeRequestRulebookRef = useRef<string | null>(null);
   const quickSearchSeqRef = useRef(0);
+
+  const scrollToMessageIndex = useCallback((index: number) => {
+    const container = messagesContainerRef.current;
+    if (!container || index < 0) {
+      return;
+    }
+    const target = container.querySelector<HTMLElement>(`#message-${index}`);
+    if (!target) {
+      return;
+    }
+    scheduleScrollContainerToChildTop(container, target);
+  }, []);
 
   const effectiveSidebarCollapsed = isDesktop && sidebarCollapsed;
 
@@ -467,31 +479,23 @@ export default function App({
     : "";
   const lastMessageRole = lastMessageIndex >= 0 ? messages[lastMessageIndex]?.role : null;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) {
       return;
     }
 
-    const scroll = () => {
-      if (loading) {
-        container.scrollTop = container.scrollHeight;
-        return;
+    if (lastMessageRole === "referee" && lastMessageIndex >= 0) {
+      const target = container.querySelector<HTMLElement>(`#message-${lastMessageIndex}`);
+      if (target) {
+        return scheduleScrollContainerToChildTop(container, target);
       }
+      return;
+    }
 
-      if (lastMessageRole === "referee" && lastMessageIndex >= 0) {
-        const target = container.querySelector<HTMLElement>(`#message-${lastMessageIndex}`);
-        if (target) {
-          scrollContainerToChildTop(container, target);
-          return;
-        }
-      }
-
+    if (loading) {
       container.scrollTop = container.scrollHeight;
-    };
-
-    const frame = window.requestAnimationFrame(scroll);
-    return () => window.cancelAnimationFrame(frame);
+    }
   }, [lastMessageKey, lastMessageIndex, lastMessageRole, loading, selectedId]);
 
   useEffect(() => {
@@ -720,6 +724,7 @@ export default function App({
     activeRequestRulebookRef.current = requestRulebookId;
     setLoading(true);
     setError(null);
+    let answerMessageIndex = -1;
     try {
       const priorClarification = requestRulebookId in clarifications
         ? clarifications[requestRulebookId]
@@ -738,6 +743,7 @@ export default function App({
         setClarificationFor(requestRulebookId, null);
       }
       const threadWithRuling = commitRuling(requestRulebookId, userMessage, answer);
+      answerMessageIndex = threadWithRuling.length - 1;
       persistThreadAndHistory(requestRulebookId, threadWithRuling);
       setQuestion("");
     } catch (err) {
@@ -749,6 +755,9 @@ export default function App({
         loadingRef.current = false;
         activeRequestRulebookRef.current = null;
         setLoading(false);
+        if (answerMessageIndex >= 0) {
+          scrollToMessageIndex(answerMessageIndex);
+        }
       }
     }
   }
@@ -785,6 +794,7 @@ export default function App({
     activeRequestRulebookRef.current = requestRulebookId;
     setLoading(true);
     setError(null);
+    let answerMessageIndex = -1;
     try {
       const answer = await disputeRulebook(
         requestRulebookId,
@@ -810,6 +820,7 @@ export default function App({
         setDisputeFormExpanded(false);
       }
       const threadWithRuling = commitRuling(requestRulebookId, userMessage, answer);
+      answerMessageIndex = threadWithRuling.length - 1;
       persistThreadAndHistory(requestRulebookId, threadWithRuling);
       setQuestion("");
     } catch (err) {
@@ -821,6 +832,9 @@ export default function App({
         loadingRef.current = false;
         activeRequestRulebookRef.current = null;
         setLoading(false);
+        if (answerMessageIndex >= 0) {
+          scrollToMessageIndex(answerMessageIndex);
+        }
       }
     }
   }
@@ -863,6 +877,7 @@ export default function App({
     activeRequestRulebookRef.current = requestRulebookId;
     setLoading(true);
     setError(null);
+    let answerMessageIndex = -1;
     try {
       const answer = await disputeRulebook(requestRulebookId, situation, playerA, playerB, history);
       if (activeRequestRulebookRef.current !== requestRulebookId) {
@@ -878,6 +893,7 @@ export default function App({
         setClarificationFor(requestRulebookId, null);
       }
       const threadWithRuling = commitRuling(requestRulebookId, disputeMessage, answer);
+      answerMessageIndex = threadWithRuling.length - 1;
       persistThreadAndHistory(requestRulebookId, threadWithRuling);
       if (!answer.ruling.needs_clarification || !answer.ruling.clarification_question) {
         setDisputeSituation("");
@@ -894,6 +910,9 @@ export default function App({
         loadingRef.current = false;
         activeRequestRulebookRef.current = null;
         setLoading(false);
+        if (answerMessageIndex >= 0) {
+          scrollToMessageIndex(answerMessageIndex);
+        }
       }
     }
   }
