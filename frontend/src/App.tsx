@@ -191,7 +191,7 @@ export default function App({
   const clarificationOverride = selectedId && selectedId in clarifications
     ? clarifications[selectedId]
     : undefined;
-  const activeClarification = getActiveClarification(messages, chatMode, clarificationOverride);
+  const activeClarification = getActiveClarification(messages, clarificationOverride);
   const exampleQuestions = selectedId ? examples[selectedId] ?? [] : [];
   const recentExchanges = selectedId ? listRecentExchanges(history[selectedId] ?? []) : [];
   const displayedRecentExchanges = visibleRecentExchanges(recentExchanges, showAllRecentExchanges);
@@ -849,7 +849,6 @@ export default function App({
     if (!selectedId || !question.trim() || loadingRef.current) return;
 
     const reply = question.trim();
-    setQuestion("");
     if (activeClarification) {
       await submitClarification(reply);
       return;

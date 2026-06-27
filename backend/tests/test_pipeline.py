@@ -7,6 +7,7 @@ import pytest
 from agents.pipeline import RefereePipeline, _reindex_lock
 from services.conversation import retrieval_query
 from services.faq_cache import ask_lookup_key
+from services.rulebook_store import DuplicateRulebookError
 from services.vector_store import StoredChunk
 
 
@@ -214,3 +215,40 @@ def test_ask_while_reindexing_raises(sample_pdf, isolated_data):
             pipeline.ask(book_id, "Can I attack on the first turn?")
     finally:
         lock.release()
+
+
+def test_concurrent_upload_same_pdf_creates_one_rulebook(sample_pdf, isolated_data):
+    import threading
+
+    pipeline = RefereePipeline()
+    pdf_bytes = sample_pdf.read_bytes()
+    barrier = threading.Barrier(2)
+    uploads: list[dict] = []
+    duplicates: list[DuplicateRulebookError] = []
+
+    def upload_once(label: str) -> None:
+        barrier.wait()
+        try:
+            uploads.append(
+                pipeline.upload_rulebook(
+                    label,
+                    f"{label}.pdf",
+                    pdf_bytes,
+                    original_filename="sample-rulebook.pdf",
+                )
+            )
+        except DuplicateRulebookError as exc:
+            duplicates.append(exc)
+
+    threads = [
+        threading.Thread(target=upload_once, args=(f"Game {index}",))
+        for index in range(2)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert len(uploads) == 1
+    assert len(duplicates) == 1
+    assert len(pipeline.store.list()) == 1

@@ -151,6 +151,9 @@ class RulebookStore:
         demo: bool = False,
     ) -> Rulebook:
         with self._lock:
+            for book in self._rulebooks.values():
+                if content_hash and book.content_hash == content_hash:
+                    raise DuplicateRulebookError(book)
             book = Rulebook(
                 id=str(uuid.uuid4()),
                 name=name,

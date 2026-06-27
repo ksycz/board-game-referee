@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import threading
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 
 from agents.citation_agent import CitationAgent
 from agents.ingestion_agent import IngestionAgent
@@ -42,10 +43,16 @@ def _reindex_lock(rulebook_id: str) -> threading.Lock:
         return lock
 
 
-def _ensure_not_reindexing(rulebook_id: str) -> None:
+@contextmanager
+def _rulebook_query_lock(rulebook_id: str) -> Iterator[None]:
+    """Hold the per-rulebook lock for the full ask/search/dispute query."""
     lock = _reindex_lock(rulebook_id)
-    if lock.locked():
+    if not lock.acquire(blocking=False):
         raise ValueError("This rulebook is being re-indexed. Try again in a moment.")
+    try:
+        yield
+    finally:
+        lock.release()
 
 
 class RefereePipeline:
@@ -138,10 +145,6 @@ class RefereePipeline:
         demo: bool = False,
     ) -> dict:
         content_hash = pdf_content_hash(pdf_bytes)
-        existing = self.store.find_by_content_hash(content_hash)
-        if existing:
-            raise DuplicateRulebookError(existing)
-
         book = self.store.add(
             name=name or "Rulebook",
             filename=filename,
@@ -179,11 +182,11 @@ class RefereePipeline:
     def quick_search(self, rulebook_id: str, query: str, *, limit: int = 8) -> dict:
         if not self.store.get(rulebook_id):
             raise KeyError(f"Rulebook not found: {rulebook_id}")
-        _ensure_not_reindexing(rulebook_id)
         trimmed = query.strip()
         if len(trimmed) < 2:
             raise ValueError("Enter at least two characters to search.")
-        return self.retrieval.quick_search(rulebook_id, trimmed, limit)
+        with _rulebook_query_lock(rulebook_id):
+            return self.retrieval.quick_search(rulebook_id, trimmed, limit)
 
     def ask(
         self,
@@ -196,44 +199,43 @@ class RefereePipeline:
         if not book:
             raise KeyError(f"Rulebook not found: {rulebook_id}")
 
-        _ensure_not_reindexing(rulebook_id)
+        with _rulebook_query_lock(rulebook_id):
+            prior = trim_history(history or [])
+            if not prior:
+                cached = self.faq_cache.get(rulebook_id, ask_lookup_key(question))
+                if cached:
+                    return self._with_response_id(cached)
 
-        prior = trim_history(history or [])
-        if not prior:
-            cached = self.faq_cache.get(rulebook_id, ask_lookup_key(question))
-            if cached:
-                return self._with_response_id(cached)
+            k = top_k or TOP_K_CHUNKS
+            search_query = retrieval_query(question, prior)
+            retrieval = self.retrieval.retrieve(rulebook_id, search_query, k)
+            chunks = retrieval["chunks"]
 
-        k = top_k or TOP_K_CHUNKS
-        search_query = retrieval_query(question, prior)
-        retrieval = self.retrieval.retrieve(rulebook_id, search_query, k)
-        chunks = retrieval["chunks"]
+            ruling = self.referee.rule_on(question, chunks, prior)
+            validation = self.citation.validate(ruling, chunks)
 
-        ruling = self.referee.rule_on(question, chunks, prior)
-        validation = self.citation.validate(ruling, chunks)
-
-        response = self._finalize_response(
-            {
-                "mode": "ask",
-                "rulebook_id": rulebook_id,
-                "rulebook_name": book.name,
-                "question": question,
-                "retrieval": self._retrieval_payload(chunks),
-                "ruling": ruling,
-                "citation_check": validation,
-            },
-            top_k=k,
-            search_query=search_query,
-        )
-        if not prior:
-            self.faq_cache.put(
-                rulebook_id,
-                ask_lookup_key(question),
-                response,
-                label=question,
-                mode="ask",
+            response = self._finalize_response(
+                {
+                    "mode": "ask",
+                    "rulebook_id": rulebook_id,
+                    "rulebook_name": book.name,
+                    "question": question,
+                    "retrieval": self._retrieval_payload(chunks),
+                    "ruling": ruling,
+                    "citation_check": validation,
+                },
+                top_k=k,
+                search_query=search_query,
             )
-        return response
+            if not prior:
+                self.faq_cache.put(
+                    rulebook_id,
+                    ask_lookup_key(question),
+                    response,
+                    label=question,
+                    mode="ask",
+                )
+            return response
 
     def dispute(
         self,
@@ -248,49 +250,48 @@ class RefereePipeline:
         if not book:
             raise KeyError(f"Rulebook not found: {rulebook_id}")
 
-        _ensure_not_reindexing(rulebook_id)
+        with _rulebook_query_lock(rulebook_id):
+            prior = trim_history(history or [])
+            if not prior:
+                cached = self.faq_cache.get(
+                    rulebook_id,
+                    dispute_lookup_key(situation, player_a, player_b),
+                )
+                if cached:
+                    return self._with_response_id(cached)
 
-        prior = trim_history(history or [])
-        if not prior:
-            cached = self.faq_cache.get(
-                rulebook_id,
-                dispute_lookup_key(situation, player_a, player_b),
+            k = top_k or TOP_K_CHUNKS
+            search_query = dispute_retrieval_query(situation, player_a, player_b)
+            retrieval = self.retrieval.retrieve(rulebook_id, search_query, k)
+            chunks = retrieval["chunks"]
+
+            ruling = self.referee.rule_dispute(situation, player_a, player_b, chunks, prior)
+            validation = self.citation.validate(ruling, chunks)
+
+            response = self._finalize_response(
+                {
+                    "mode": "dispute",
+                    "rulebook_id": rulebook_id,
+                    "rulebook_name": book.name,
+                    "situation": situation,
+                    "player_a": player_a,
+                    "player_b": player_b,
+                    "retrieval": self._retrieval_payload(chunks),
+                    "ruling": ruling,
+                    "citation_check": validation,
+                },
+                top_k=k,
+                search_query=search_query,
             )
-            if cached:
-                return self._with_response_id(cached)
-
-        k = top_k or TOP_K_CHUNKS
-        search_query = dispute_retrieval_query(situation, player_a, player_b)
-        retrieval = self.retrieval.retrieve(rulebook_id, search_query, k)
-        chunks = retrieval["chunks"]
-
-        ruling = self.referee.rule_dispute(situation, player_a, player_b, chunks, prior)
-        validation = self.citation.validate(ruling, chunks)
-
-        response = self._finalize_response(
-            {
-                "mode": "dispute",
-                "rulebook_id": rulebook_id,
-                "rulebook_name": book.name,
-                "situation": situation,
-                "player_a": player_a,
-                "player_b": player_b,
-                "retrieval": self._retrieval_payload(chunks),
-                "ruling": ruling,
-                "citation_check": validation,
-            },
-            top_k=k,
-            search_query=search_query,
-        )
-        if not prior:
-            self.faq_cache.put(
-                rulebook_id,
-                dispute_lookup_key(situation, player_a, player_b),
-                response,
-                label=situation,
-                mode="dispute",
-            )
-        return response
+            if not prior:
+                self.faq_cache.put(
+                    rulebook_id,
+                    dispute_lookup_key(situation, player_a, player_b),
+                    response,
+                    label=situation,
+                    mode="dispute",
+                )
+            return response
 
     def record_feedback(self, rulebook_id: str, payload: dict) -> None:
         if not self.store.get(rulebook_id):

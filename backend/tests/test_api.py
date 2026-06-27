@@ -92,8 +92,11 @@ def test_upload_duplicate_pdf_returns_409(client, sample_pdf):
 
 
 def test_list_dedupes_existing_duplicates(client, sample_pdf):
+    import uuid
+    from datetime import UTC, datetime
+
     import main
-    from services.rulebook_store import pdf_content_hash
+    from services.rulebook_store import Rulebook, pdf_content_hash
 
     pdf_bytes = sample_pdf.read_bytes()
     content_hash = pdf_content_hash(pdf_bytes)
@@ -101,11 +104,19 @@ def test_list_dedupes_existing_duplicates(client, sample_pdf):
     rulebooks_dir = store._index_path.parent
 
     first = store.add("Game A", "a.pdf", 4, content_hash=content_hash)
-    second = store.add("Game B", "b.pdf", 4, content_hash=content_hash)
+    second = Rulebook(
+        id=str(uuid.uuid4()),
+        name="Game B",
+        filename="b.pdf",
+        page_count=4,
+        created_at=datetime.now(UTC).isoformat(),
+        content_hash=content_hash,
+    )
+    with store._lock:
+        store._rulebooks[second.id] = second
+        store._save_unlocked()
     (rulebooks_dir / first.filename).write_bytes(pdf_bytes)
     (rulebooks_dir / second.filename).write_bytes(pdf_bytes)
-
-    import main
 
     main.pipeline.dedupe_rulebooks()
     listed = client.get("/api/rulebooks").json()
