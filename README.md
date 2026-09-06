@@ -74,7 +74,7 @@ PDF pages are split by section headings and paragraphs into retrieval-sized chun
 ## Prerequisites
 
 - Python 3.11+
-- Node.js 20+
+- Node.js 22+
 - An [Anthropic API key](https://console.anthropic.com/) (not needed for local E2E smoke tests)
 
 ## Local setup
@@ -259,5 +259,4 @@ board-game-referee/
 ## Ideas to try next
 
 - Multi-rulebook search — "Which of my games allows this?"
-- Persistent disk on Render for family uploads that survive restarts
 - Swap ChromaDB for a hosted vector DB at scale
