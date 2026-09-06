@@ -1,6 +1,6 @@
 import type { StoredMessage } from "../conversationStorage";
 
-export type ChatMode = "ask" | "search" | "dispute";
+export type ChatMode = "ask" | "search" | "dispute" | "reference";
 
 export type Message = StoredMessage;
 

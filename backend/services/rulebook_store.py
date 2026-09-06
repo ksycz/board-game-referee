@@ -50,6 +50,7 @@ class Rulebook:
     content_hash: str = ""
     pinned: bool = False
     demo: bool = False
+    quick_reference: dict | None = None
 
 
 class RulebookStore:
@@ -68,6 +69,7 @@ class RulebookStore:
             item.setdefault("content_hash", "")
             item.setdefault("pinned", False)
             item.setdefault("demo", False)
+            item.setdefault("quick_reference", None)
             book = Rulebook(**item)
             self._rulebooks[book.id] = book
 

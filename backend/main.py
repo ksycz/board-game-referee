@@ -379,6 +379,21 @@ def rulebook_examples(request: Request, rulebook_id: str):
         raise HTTPException(status_code=404, detail="Rulebook not found")
 
 
+@app.get("/api/rulebooks/{rulebook_id}/quick-reference")
+def rulebook_quick_reference(request: Request, rulebook_id: str):
+    require_rulebook_access(request, pipeline.store, rulebook_id)
+    try:
+        return {"quick_reference": pipeline.quick_reference(rulebook_id)}
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Rulebook not found")
+    except RateLimitError as exc:
+        raise rate_limit_http_exception(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise server_error("quick reference", exc)
+
+
 @app.delete("/api/rulebooks/{rulebook_id}")
 def delete_rulebook(request: Request, rulebook_id: str):
     require_full_access(request)

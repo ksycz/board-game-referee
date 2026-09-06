@@ -253,3 +253,81 @@ def test_concurrent_upload_same_pdf_creates_one_rulebook(sample_pdf, isolated_da
     assert len(uploads) == 1
     assert len(duplicates) == 1
     assert len(pipeline.store.list()) == 1
+
+
+class RecordingQuickReferenceReferee:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def summarize_quick_reference(self, chunks: list[StoredChunk]) -> dict:
+        self.calls += 1
+        return {
+            "agent": "quick_reference",
+            "setup": [f"call {self.calls}"],
+            "turn_order": ["Turn order."],
+            "key_actions": [],
+            "win_condition": "Win.",
+            "citations": [],
+        }
+
+
+def test_upload_rulebook_quick_reference_none_without_api_key(
+    sample_pdf, isolated_data, monkeypatch
+):
+    monkeypatch.setattr("agents.referee_agent.ANTHROPIC_API_KEY", "")
+    pipeline = RefereePipeline()
+
+    upload = pipeline.upload_rulebook(
+        "Test Game",
+        "test.pdf",
+        sample_pdf.read_bytes(),
+        original_filename="sample-rulebook.pdf",
+    )
+
+    assert upload["rulebook"].quick_reference is None
+
+
+def test_pipeline_quick_reference_persists_and_is_cached(
+    sample_pdf, isolated_data, monkeypatch
+):
+    monkeypatch.setattr("agents.referee_agent.ANTHROPIC_API_KEY", "")
+    pipeline = RefereePipeline()
+    upload = pipeline.upload_rulebook(
+        "Test Game",
+        "test.pdf",
+        sample_pdf.read_bytes(),
+        original_filename="sample-rulebook.pdf",
+    )
+    book_id = upload["rulebook"].id
+    assert upload["rulebook"].quick_reference is None
+
+    stub = RecordingQuickReferenceReferee()
+    pipeline._referee = stub
+
+    first = pipeline.quick_reference(book_id)
+    second = pipeline.quick_reference(book_id)
+
+    assert stub.calls == 1
+    assert first == second
+    assert pipeline.store.get(book_id).quick_reference == first
+
+
+def test_reindex_regenerates_quick_reference(sample_pdf, isolated_data, monkeypatch):
+    monkeypatch.setattr("agents.referee_agent.ANTHROPIC_API_KEY", "")
+    pipeline = RefereePipeline()
+    upload = pipeline.upload_rulebook(
+        "Test Game",
+        "test.pdf",
+        sample_pdf.read_bytes(),
+        original_filename="sample-rulebook.pdf",
+    )
+    book_id = upload["rulebook"].id
+
+    stub = RecordingQuickReferenceReferee()
+    pipeline._referee = stub
+    first = pipeline.quick_reference(book_id)
+
+    result = pipeline.reindex(book_id)
+
+    assert stub.calls == 2
+    assert result["rulebook"].quick_reference != first

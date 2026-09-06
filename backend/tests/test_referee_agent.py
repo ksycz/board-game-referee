@@ -2,7 +2,13 @@
 
 from unittest.mock import MagicMock
 
-from agents.referee_agent import DISPUTE_SYSTEM_PROMPT, RefereeAgent
+import pytest
+
+from agents.referee_agent import (
+    DISPUTE_SYSTEM_PROMPT,
+    QUICK_REFERENCE_SYSTEM_PROMPT,
+    RefereeAgent,
+)
 from services.vector_store import StoredChunk
 
 VALID_RESPONSE = """{
@@ -92,3 +98,47 @@ def test_rule_dispute_includes_both_players_in_prompt():
     assert "Player A says: Yes, right after combat ends." in content
     assert "Player B says: No, only on my next turn." in content
     assert result["favors"] == "player_a"
+
+
+QUICK_REFERENCE_RESPONSE = """{
+  "setup": ["Each player draws 5 cards."],
+  "turn_order": ["Turn: take one action."],
+  "key_actions": [{"name": "Attack", "summary": "Discard a card and roll the die."}],
+  "win_condition": "Be the last player standing.",
+  "citations": [{"page": 1, "section": "Setup"}]
+}"""
+
+
+def test_summarize_quick_reference_parses_structured_json():
+    mock_client = MagicMock()
+    mock_message = MagicMock()
+    mock_message.content = [MagicMock(text=QUICK_REFERENCE_RESPONSE)]
+    mock_client.messages.create.return_value = mock_message
+
+    agent = RefereeAgent(api_key="test-key")
+    agent.quick_reference_client = mock_client
+
+    chunks = [
+        StoredChunk(
+            chunk_id="1",
+            page=1,
+            text="Each player draws 5 cards.",
+            section_hint="Setup",
+        )
+    ]
+
+    result = agent.summarize_quick_reference(chunks)
+
+    kwargs = mock_client.messages.create.call_args.kwargs
+    assert kwargs["system"] == QUICK_REFERENCE_SYSTEM_PROMPT
+    content = kwargs["messages"][0]["content"]
+    assert "Each player draws 5 cards." in content
+    assert result["agent"] == "quick_reference"
+    assert result["setup"] == ["Each player draws 5 cards."]
+    assert result["win_condition"] == "Be the last player standing."
+
+
+def test_summarize_quick_reference_requires_chunks():
+    agent = RefereeAgent(api_key="test-key")
+    with pytest.raises(ValueError):
+        agent.summarize_quick_reference([])

@@ -2165,6 +2165,106 @@ html.confirm-dialog-open body {
   color: var(--ink-muted);
 }
 
+.quick-reference {
+  display: grid;
+  gap: 0.9rem;
+  margin: 0 1.15rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-sm);
+}
+
+.quick-reference-section h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.quick-reference-section ol {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.quick-reference-section p {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.quick-reference-actions {
+  margin: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.quick-reference-action {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.quick-reference-action dt {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.quick-reference-action dd {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--ink-muted);
+}
+
+.quick-reference-loading,
+.quick-reference-empty {
+  margin: 0 1.15rem;
+  padding: 0.85rem 0.95rem;
+  font-size: 0.82rem;
+  color: var(--ink-muted);
+}
+
+.quick-reference-error {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0 1.15rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+}
+
+.quick-reference-error p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--ink);
+}
+
+.quick-reference-error button {
+  justify-self: start;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--border-gold);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent-glow);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.quick-reference-error button:hover {
+  background: rgb(122 40 56 / 0.18);
+}
+
 .ask-form {
   display: flex;
   gap: 0.55rem;

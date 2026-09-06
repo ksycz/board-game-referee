@@ -9,7 +9,12 @@ import anthropic
 
 from errors import RateLimitError
 
-from config import ANTHROPIC_API_KEY, ANTHROPIC_TIMEOUT_SECONDS, MODEL
+from config import (
+    ANTHROPIC_API_KEY,
+    ANTHROPIC_TIMEOUT_SECONDS,
+    MODEL,
+    QUICK_REFERENCE_TIMEOUT_SECONDS,
+)
 from services.conversation import format_history_block
 from services.vector_store import StoredChunk
 
@@ -90,6 +95,24 @@ Use favors:
 Set needs_clarification to true only when the dispute depends on missing game state.
 """
 
+QUICK_REFERENCE_SYSTEM_PROMPT = """You are a board game rules referee. Synthesize a one-page quick-reference
+cheat sheet from the provided rulebook excerpts, covering setup, turn structure, common actions, and how to win.
+
+Rules:
+- Use ONLY the provided excerpts. Do not invent rules not present in the text.
+- Be concise — this is a scannable at-a-table reference, not a full rules explanation.
+- Prefer short imperative steps/phrases over full sentences.
+
+Respond with valid JSON only (no markdown fences):
+{
+  "setup": ["Step 1", "Step 2"],
+  "turn_order": ["Phase name: what happens", "..."],
+  "key_actions": [{"name": "Attack", "summary": "One-line description"}],
+  "win_condition": "One or two sentences on how the game ends / how to win",
+  "citations": [{"page": 3, "section": "Setup"}, {"page": 5, "section": "Turn Order"}]
+}
+"""
+
 
 def _format_context(chunks: list[StoredChunk]) -> str:
     blocks: list[str] = []
@@ -125,6 +148,10 @@ class RefereeAgent:
         self.client = anthropic.Anthropic(
             api_key=key,
             timeout=ANTHROPIC_TIMEOUT_SECONDS,
+        )
+        self.quick_reference_client = anthropic.Anthropic(
+            api_key=key,
+            timeout=QUICK_REFERENCE_TIMEOUT_SECONDS,
         )
 
     def rule_on(
@@ -178,6 +205,41 @@ class RefereeAgent:
         except json.JSONDecodeError as exc:
             raise ValueError("Referee returned invalid JSON. Please try again.") from exc
         parsed["agent"] = "referee"
+        return parsed
+
+    def summarize_quick_reference(self, chunks: list[StoredChunk]) -> dict:
+        if not chunks:
+            raise ValueError("No indexed rulebook content available to summarize.")
+
+        try:
+            message = self.quick_reference_client.messages.create(
+                model=MODEL,
+                max_tokens=1536,
+                system=QUICK_REFERENCE_SYSTEM_PROMPT,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"Rulebook excerpts:\n\n{_format_context(chunks)}",
+                    }
+                ],
+            )
+        except anthropic.AuthenticationError as exc:
+            raise ValueError("Invalid ANTHROPIC_API_KEY") from exc
+        except anthropic.NotFoundError as exc:
+            raise ValueError(f"Model '{MODEL}' not found. Update ANTHROPIC_MODEL in .env.") from exc
+        except anthropic.RateLimitError as exc:
+            raise RateLimitError() from exc
+        except anthropic.APIConnectionError as exc:
+            raise ValueError("Could not reach Anthropic API. Check your network.") from exc
+        except anthropic.APIError as exc:
+            raise ValueError(f"Anthropic API error: {exc.message}") from exc
+
+        raw = _response_text(message)
+        try:
+            parsed = _parse_response(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError("Referee returned invalid JSON. Please try again.") from exc
+        parsed["agent"] = "quick_reference"
         return parsed
 
     def rule_dispute(

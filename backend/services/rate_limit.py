@@ -83,6 +83,13 @@ def rate_limit_rule_for_request(path: str, method: str) -> RateLimitRule | None:
             config.RATE_LIMIT_EXPENSIVE_WINDOW,
         )
 
+    if method == "GET" and path.endswith("/quick-reference"):
+        return RateLimitRule(
+            "expensive",
+            config.RATE_LIMIT_EXPENSIVE_MAX,
+            config.RATE_LIMIT_EXPENSIVE_WINDOW,
+        )
+
     if method == "GET" and _PREVIEW_PATH.match(path):
         return RateLimitRule(
             "preview",

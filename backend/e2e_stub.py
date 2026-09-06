@@ -67,6 +67,19 @@ class StubReferee:
             "player_b_assessment": "Does not match the retrieved rule text.",
         }
 
+    def summarize_quick_reference(self, chunks: list[StoredChunk]) -> dict:
+        if not chunks:
+            raise ValueError("No indexed rulebook content available to summarize.")
+        chunk = chunks[0]
+        return {
+            "agent": "quick_reference",
+            "setup": ["Stub setup step."],
+            "turn_order": ["Stub turn order phase."],
+            "key_actions": [{"name": "Stub Action", "summary": "Stub description."}],
+            "win_condition": "Stub win condition.",
+            "citations": [{"page": chunk.page, "section": chunk.section_hint}],
+        }
+
 
 def _grounded_citation(
     chunks: list[StoredChunk],

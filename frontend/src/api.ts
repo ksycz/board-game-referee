@@ -141,6 +141,19 @@ async function throwIfNotOk(res: Response, fallback: string): Promise<void> {
   throw err;
 }
 
+export type QuickReferenceKeyAction = {
+  name: string;
+  summary: string;
+};
+
+export type QuickReferenceData = {
+  setup: string[];
+  turn_order: string[];
+  key_actions: QuickReferenceKeyAction[];
+  win_condition: string;
+  citations?: Citation[];
+};
+
 export type Rulebook = {
   id: string;
   name: string;
@@ -148,6 +161,7 @@ export type Rulebook = {
   page_count: number;
   created_at: string;
   pinned?: boolean;
+  quick_reference?: QuickReferenceData | null;
 };
 
 export type Citation = {
@@ -261,7 +275,7 @@ export type AskResponse = {
 };
 
 export type UploadProgress = {
-  phase: "starting" | "reading" | "scanning" | "indexing";
+  phase: "starting" | "reading" | "scanning" | "indexing" | "reference";
   page: number;
   total_pages: number;
 };
@@ -413,6 +427,7 @@ export function formatUploadProgressMessage(
     return "Opening PDF…";
   }
   if (phase === "indexing") return "Building search index…";
+  if (phase === "reference") return "Building quick reference…";
   if (phase === "scanning" && total_pages > 0) {
     return `Scanning page ${page} of ${total_pages} (mostly graphics)…`;
   }
@@ -424,6 +439,7 @@ export function formatUploadProgressMessage(
 
 export function uploadProgressPercent(progress: UploadProgress): number {
   const { phase, page, total_pages } = progress;
+  if (phase === "reference") return 97;
   if (phase === "indexing") return 95;
   if (phase === "starting" || total_pages <= 0) return 5;
   const pageFraction = page / total_pages;
@@ -708,6 +724,18 @@ export async function fetchExampleQuestions(rulebookId: string): Promise<string[
   }
   const data = await res.json();
   return data.questions ?? [];
+}
+
+export async function fetchQuickReference(rulebookId: string): Promise<QuickReferenceData> {
+  const res = await fetch(`${API}/api/rulebooks/${rulebookId}/quick-reference`, {
+    headers: apiAuthHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(parseErrorDetail(err.detail) ?? "Failed to load quick reference");
+  }
+  const data = await res.json();
+  return data.quick_reference;
 }
 
 export async function searchRulebook(

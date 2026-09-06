@@ -9,6 +9,7 @@ import {
   deleteRulebook,
   disputeRulebook,
   fetchExampleQuestions,
+  fetchQuickReference,
   buildRulebookHealthSummary,
   formatRulebookHealthCopy,
   formatUploadProgressMessage,
@@ -24,6 +25,7 @@ import {
   type RulebookHealthSummary,
   type SearchHit,
   type AskResponse,
+  type QuickReferenceData,
 } from "./api";
 import {
   IconBook,
@@ -76,6 +78,7 @@ import { AppBrandHeader } from "./components/AppBrandHeader";
 import { AppNotice, RulebookHealthNotice } from "./components/AppNotices";
 import { useConfirmDialog } from "./components/ConfirmDialog";
 import { QuickSearchPanel } from "./components/QuickSearch";
+import { QuickReferencePanel } from "./components/QuickReference";
 import { RefereeAnswer } from "./components/RefereeAnswer";
 
 export default function App({
@@ -102,6 +105,9 @@ export default function App({
   const [history, setHistory] = useState<Record<string, HistoryExchange[]>>(() => loadAllHistory());
   const [clarifications, setClarifications] = useState<Record<string, ClarificationContext | null>>({});
   const [examples, setExamples] = useState<Record<string, string[]>>({});
+  const [quickReferences, setQuickReferences] = useState<Record<string, QuickReferenceData | null>>({});
+  const [quickReferenceLoading, setQuickReferenceLoading] = useState(false);
+  const [quickReferenceError, setQuickReferenceError] = useState<string | null>(null);
   const [question, setQuestion] = useState("");
   const [chatMode, setChatMode] = useState<ChatMode>("ask");
   const [disputeSituation, setDisputeSituation] = useState("");
@@ -572,6 +578,36 @@ export default function App({
       });
   }, [selectedId, examples]);
 
+  useEffect(() => {
+    if (!selectedId || Object.hasOwn(quickReferences, selectedId)) {
+      return;
+    }
+
+    setQuickReferenceLoading(true);
+    setQuickReferenceError(null);
+    fetchQuickReference(selectedId)
+      .then((data) => {
+        setQuickReferences((current) => ({ ...current, [selectedId]: data }));
+      })
+      .catch((err) => {
+        setQuickReferenceError(
+          err instanceof Error ? err.message : "Failed to load quick reference",
+        );
+      })
+      .finally(() => setQuickReferenceLoading(false));
+  }, [selectedId, quickReferences]);
+
+  const retryQuickReference = useCallback((rulebookId: string) => {
+    setQuickReferences((current) => {
+      if (!(rulebookId in current)) {
+        return current;
+      }
+      const next = { ...current };
+      delete next[rulebookId];
+      return next;
+    });
+  }, []);
+
   const selected = rulebooks.find((b) => b.id === selectedId);
 
   async function openHistoryExchange(rulebookId: string, exchangeId: string) {
@@ -666,6 +702,11 @@ export default function App({
       delete next[id];
       return next;
     });
+    setQuickReferences((current) => {
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
   }
 
   async function ingestUploadedRulebook(upload: Awaited<ReturnType<typeof uploadRulebook>>) {
@@ -673,6 +714,10 @@ export default function App({
     setExamples((current) => ({
       ...current,
       [upload.rulebook.id]: upload.example_questions,
+    }));
+    setQuickReferences((current) => ({
+      ...current,
+      [upload.rulebook.id]: upload.rulebook.quick_reference ?? null,
     }));
     clearConversation(upload.rulebook.id);
     await refresh();
@@ -706,6 +751,10 @@ export default function App({
         setExamples((current) => ({
           ...current,
           [err.rulebook.id]: err.example_questions,
+        }));
+        setQuickReferences((current) => ({
+          ...current,
+          [err.rulebook.id]: err.rulebook.quick_reference ?? null,
         }));
         await refresh();
         setInfo(
@@ -770,6 +819,10 @@ export default function App({
         setExamples((current) => ({
           ...current,
           [err.rulebook.id]: err.example_questions,
+        }));
+        setQuickReferences((current) => ({
+          ...current,
+          [err.rulebook.id]: err.rulebook.quick_reference ?? null,
         }));
         await refresh();
         setInfo(
@@ -1078,6 +1131,10 @@ export default function App({
       setExamples((current) => ({
         ...current,
         [id]: result.example_questions,
+      }));
+      setQuickReferences((current) => ({
+        ...current,
+        [id]: result.rulebook.quick_reference ?? null,
       }));
       await refresh();
       updateThread(id, () => []);
@@ -1598,7 +1655,9 @@ export default function App({
                         ? "Ask about timing, edge cases, disputes…"
                         : chatMode === "search"
                           ? "Search indexed passages — no LLM call"
-                          : "Two players disagree — let the referee decide"}
+                          : chatMode === "reference"
+                            ? "One-page cheat sheet — setup, turns, and key actions"
+                            : "Two players disagree — let the referee decide"}
                     </span>
                   </div>
                   <div className="chat-header-actions">
@@ -1630,8 +1689,18 @@ export default function App({
                       >
                         Dispute
                       </button>
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={chatMode === "reference"}
+                        className={chatMode === "reference" ? "active" : ""}
+                        onClick={() => setChatMode("reference")}
+                      >
+                        Reference
+                      </button>
                     </div>
                     <div className="chat-header-tools">
+                      {chatMode !== "reference" && (
                       <button
                         type="button"
                         className="new-conversation"
@@ -1644,6 +1713,7 @@ export default function App({
                       >
                         New conversation
                       </button>
+                      )}
                       {fullAccess && (
                       <button
                         type="button"
@@ -1682,6 +1752,13 @@ export default function App({
                     }}
                     onSelectHit={setQuickSearchSelected}
                     rulebookId={selected.id}
+                  />
+                ) : chatMode === "reference" ? (
+                  <QuickReferencePanel
+                    data={quickReferences[selected.id] ?? null}
+                    loading={quickReferenceLoading}
+                    error={quickReferenceError}
+                    onRetry={() => retryQuickReference(selected.id)}
                   />
                 ) : (
                   <>
@@ -1770,7 +1847,7 @@ export default function App({
                 )}
               </div>
 
-              {chatMode !== "search" && (
+              {chatMode !== "search" && chatMode !== "reference" && (
               <div className="chat-composer">
                 {activeClarification && (
                   <div className="clarification-prompt" role="status">

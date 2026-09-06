@@ -18,6 +18,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr("services.vector_store.CHROMA_DIR", chroma_dir)
     monkeypatch.setattr("services.rulebook_store.RULEBOOKS_DIR", rulebooks_dir)
     monkeypatch.setattr("config.ANTHROPIC_API_KEY", "")
+    monkeypatch.setattr("agents.referee_agent.ANTHROPIC_API_KEY", "")
     monkeypatch.setattr("config.API_ACCESS_KEY", "")
     monkeypatch.setattr("config.DEMO_MODE", False)
     monkeypatch.setattr("config.PRESEED_DEMO_RULEBOOK", False)
@@ -566,6 +567,46 @@ def test_rulebook_examples(client, sample_pdf):
 def test_rulebook_examples_unknown_book_returns_404(client):
     res = client.get("/api/rulebooks/missing-id/examples")
     assert res.status_code == 404
+
+
+def test_rulebook_quick_reference_unknown_book_returns_404(client):
+    res = client.get("/api/rulebooks/missing-id/quick-reference")
+    assert res.status_code == 404
+
+
+def test_rulebook_quick_reference_without_api_key_returns_400(client, sample_pdf):
+    with sample_pdf.open("rb") as f:
+        upload = client.post(
+            "/api/rulebooks",
+            files={"file": ("sample-rulebook.pdf", f, "application/pdf")},
+            data={"name": "Test Game"},
+        )
+    book_id = upload.json()["rulebook"]["id"]
+    assert upload.json()["rulebook"]["quick_reference"] is None
+
+    res = client.get(f"/api/rulebooks/{book_id}/quick-reference")
+    assert res.status_code == 400
+
+
+def test_rulebook_quick_reference_returns_generated_sheet(client, sample_pdf, monkeypatch):
+    import main
+    from e2e_stub import StubReferee
+
+    monkeypatch.setattr(main.pipeline, "_referee", StubReferee())
+
+    with sample_pdf.open("rb") as f:
+        upload = client.post(
+            "/api/rulebooks",
+            files={"file": ("sample-rulebook.pdf", f, "application/pdf")},
+            data={"name": "Test Game"},
+        )
+    book_id = upload.json()["rulebook"]["id"]
+    assert upload.json()["rulebook"]["quick_reference"] is not None
+
+    res = client.get(f"/api/rulebooks/{book_id}/quick-reference")
+    assert res.status_code == 200
+    data = res.json()["quick_reference"]
+    assert {"setup", "turn_order", "key_actions", "win_condition"}.issubset(data.keys())
 
 
 def test_ruling_feedback(client, sample_pdf, tmp_path, monkeypatch):

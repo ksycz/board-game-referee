@@ -15,6 +15,12 @@ def test_upload_routes_use_expensive_bucket():
     assert rule.name == "expensive"
 
 
+def test_quick_reference_routes_use_expensive_bucket():
+    rule = rate_limit_rule_for_request("/api/rulebooks/abc/quick-reference", "GET")
+    assert rule is not None
+    assert rule.name == "expensive"
+
+
 def test_preview_routes_use_preview_bucket():
     rule = rate_limit_rule_for_request("/api/rulebooks/abc/pages/3/preview", "GET")
     assert rule is not None

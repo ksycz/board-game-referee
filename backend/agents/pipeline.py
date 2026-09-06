@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 import uuid
 from collections.abc import Callable, Iterator
@@ -16,6 +17,7 @@ from services.conversation import dispute_retrieval_query, retrieval_query, sani
 from services.example_questions import example_questions_for_rulebook
 from services.faq_cache import FaqCache, ask_lookup_key, dispute_lookup_key
 from services.game_name import derive_game_name
+from services.quick_reference import select_chunks_for_synthesis
 from services.retrieval_telemetry import (
     compute_confidence_hint,
     compute_retrieval_metrics,
@@ -29,6 +31,8 @@ from services.rulebook_store import (
     pdf_content_hash,
 )
 from services.vector_store import VectorStore
+
+logger = logging.getLogger(__name__)
 
 _reindex_locks: dict[str, threading.Lock] = {}
 _reindex_locks_guard = threading.Lock()
@@ -168,16 +172,38 @@ class RefereePipeline:
         book.page_count = ingest_result["pages_extracted"]
         self.store._save()
 
+        examples = self.example_questions(book.id)
+        if on_progress is not None:
+            on_progress({"phase": "reference", "page": 0, "total_pages": book.page_count})
+        try:
+            self.quick_reference(book.id)
+        except Exception:
+            logger.warning(
+                "Quick reference generation failed for rulebook %s", book.id, exc_info=True
+            )
+
         return {
             "rulebook": book,
             "ingestion": ingest_result,
-            "example_questions": self.example_questions(book.id),
+            "example_questions": examples,
         }
 
     def example_questions(self, rulebook_id: str) -> list[str]:
         if not self.store.get(rulebook_id):
             raise KeyError(f"Rulebook not found: {rulebook_id}")
         return example_questions_for_rulebook(self.vector_store, rulebook_id)
+
+    def quick_reference(self, rulebook_id: str, *, force: bool = False) -> dict:
+        book = self.store.get(rulebook_id)
+        if not book:
+            raise KeyError(f"Rulebook not found: {rulebook_id}")
+        if book.quick_reference and not force:
+            return book.quick_reference
+        chunks = select_chunks_for_synthesis(self.vector_store, rulebook_id)
+        data = self.referee.summarize_quick_reference(chunks)
+        book.quick_reference = data
+        self.store._save()
+        return data
 
     def quick_search(self, rulebook_id: str, query: str, *, limit: int = 8) -> dict:
         if not self.store.get(rulebook_id):
@@ -367,6 +393,17 @@ class RefereePipeline:
             book.page_count = ingest_result["pages_extracted"]
             self.store._save()
             faq_cache_cleared = self.faq_cache.clear_rulebook(rulebook_id)
+
+            if on_progress is not None:
+                on_progress({"phase": "reference", "page": 0, "total_pages": book.page_count})
+            try:
+                self.quick_reference(rulebook_id, force=True)
+            except Exception:
+                logger.warning(
+                    "Quick reference regeneration failed for rulebook %s",
+                    rulebook_id,
+                    exc_info=True,
+                )
 
             return {
                 "rulebook": book,
