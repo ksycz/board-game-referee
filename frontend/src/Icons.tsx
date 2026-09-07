@@ -113,6 +113,43 @@ export function IconDice({ className }: IconProps) {
   );
 }
 
+export function IconLayoutGrid({ className }: IconProps) {
+  return (
+    <Icon className={className}>
+      <rect x="3" y="3" width="7.5" height="7.5" rx="1.5" />
+      <rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5" />
+      <rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5" />
+      <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5" />
+      <circle cx="6.75" cy="6.75" r="1" fill="currentColor" stroke="none" />
+    </Icon>
+  );
+}
+
+export function IconCycle({ className }: IconProps) {
+  return (
+    <Icon className={className}>
+      <path d="M4 12a8 8 0 0 1 13.9-5.4" />
+      <path d="M18.5 3v4.3h-4.3" />
+      <path d="M20 12a8 8 0 0 1-13.9 5.4" />
+      <path d="M5.5 21v-4.3h4.3" />
+    </Icon>
+  );
+}
+
+export function IconTrophy({ className }: IconProps) {
+  return (
+    <Icon className={className}>
+      <path d="M7 4h10v4a5 5 0 0 1-10 0V4Z" />
+      <path d="M7 5H4v2a3 3 0 0 0 3 3" />
+      <path d="M17 5h3v2a3 3 0 0 0-3 3" />
+      <path d="M12 13v3.5" />
+      <path d="M9.25 20.5 10 17h4l.75 3.5Z" />
+      <path d="M8 20.5h8" />
+      <circle cx="12" cy="6.5" r="1" fill="currentColor" stroke="none" />
+    </Icon>
+  );
+}
+
 export function IconClose({ className }: IconProps) {
   return (
     <Icon className={className}>
