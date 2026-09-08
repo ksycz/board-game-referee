@@ -1799,12 +1799,22 @@ export default function App({
                 {visibleMessages.map(({ message: msg, index: i }) =>
                   msg.role === "user" ? (
                     <div key={messageDomKey(msg, i)} id={`message-${i}`} className="message-wrap user">
-                      <span className="message-label">You</span>
+                      <div className="message-meta">
+                        <span className="message-avatar message-avatar-user">
+                          <IconDice className="icon icon-xs" />
+                        </span>
+                        <span className="message-label">You</span>
+                      </div>
                       <div className="bubble user">{msg.text}</div>
                     </div>
                   ) : msg.role === "dispute" ? (
                     <div key={messageDomKey(msg, i)} id={`message-${i}`} className="message-wrap dispute">
-                      <span className="message-label">Dispute</span>
+                      <div className="message-meta">
+                        <span className="message-avatar message-avatar-dispute">
+                          <IconMeeple className="icon icon-xs" />
+                        </span>
+                        <span className="message-label">Dispute</span>
+                      </div>
                       <div className="bubble dispute">
                         <p className="dispute-field">
                           <strong>Situation</strong>
@@ -1822,7 +1832,12 @@ export default function App({
                     </div>
                   ) : (
                     <div key={messageDomKey(msg, i)} id={`message-${i}`} className="message-wrap referee">
-                      <span className="message-label">Referee</span>
+                      <div className="message-meta">
+                        <span className="message-avatar message-avatar-referee">
+                          <IconScales className="icon icon-xs" />
+                        </span>
+                        <span className="message-label">Referee</span>
+                      </div>
                       <RefereeAnswer
                         rulebookId={selected.id}
                         data={msg.data}
@@ -1839,7 +1854,12 @@ export default function App({
                 )}
                 {loading && (
                   <div className="message-wrap referee loading-message" aria-live="polite">
-                    <span className="message-label">Referee</span>
+                    <div className="message-meta">
+                      <span className="message-avatar message-avatar-referee">
+                        <IconScales className="icon icon-xs" />
+                      </span>
+                      <span className="message-label">Referee</span>
+                    </div>
                     <div className="bubble referee loading-bubble">
                       <span className="loading-dots" aria-hidden="true">
                         <span />

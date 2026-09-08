@@ -49,6 +49,7 @@
 
   --glow-gold: 0 0 18px rgb(184 134 44 / 0.28);
   --glow-teal: 0 0 18px rgb(90 122 74 / 0.22);
+  --glow-dispute: 0 0 18px rgb(168 98 46 / 0.22);
 
   --shadow-sm: 0 1px 2px rgb(16 10 6 / 0.28), 0 8px 20px rgb(16 10 6 / 0.16);
   --shadow-md: 0 8px 28px rgb(16 10 6 / 0.26), 0 0 0 1px rgb(184 134 44 / 0.12);
@@ -75,6 +76,16 @@
 *::before,
 *::after {
   box-sizing: border-box;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+[role="tab"]:focus-visible {
+  outline: 2px solid var(--accent-glow);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 
 body {
@@ -162,7 +173,7 @@ body::after {
   height: 3.1rem;
   display: grid;
   place-items: center;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background:
     radial-gradient(circle at 30% 25%, rgb(212 165 72 / 0.18), transparent 55%),
     radial-gradient(circle at 50% 50%, transparent 58%, rgb(184 134 44 / 0.16) 61%, transparent 66%),
@@ -253,7 +264,7 @@ body::after {
   flex-shrink: 0;
   width: 2.6rem;
   height: 2.6rem;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   border: 1px solid rgb(184 134 44 / 0.22);
   background: linear-gradient(145deg, rgb(184 134 44 / 0.12), rgb(33 23 18 / 0.28));
   color: var(--accent-glow);
@@ -559,7 +570,7 @@ body::after {
   justify-content: center;
   width: 1.5rem;
   height: 1.5rem;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--accent-soft);
   border: 1px solid var(--border-gold);
   color: var(--accent-glow);
@@ -813,7 +824,7 @@ body::after {
   height: 1.75rem;
   display: grid;
   place-items: center;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: rgb(33 23 18 / 0.3);
   border: 1px solid var(--border-gold);
   color: var(--accent-glow);
@@ -1317,6 +1328,40 @@ body::after {
   color: var(--ink-soft);
 }
 
+.message-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.message-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+}
+
+.message-avatar-user {
+  background: var(--player-soft);
+  color: var(--player-glow);
+  border: 1px solid var(--border-teal);
+}
+
+.message-avatar-referee {
+  background: var(--accent-soft);
+  color: var(--accent-glow);
+  border: 1px solid var(--border-gold);
+}
+
+.message-avatar-dispute {
+  background: var(--dispute-soft);
+  color: var(--dispute);
+  border: 1px solid color-mix(in srgb, var(--dispute) 45%, var(--border));
+}
+
 .message-wrap.user .message-label {
   color: var(--player-glow);
 }
@@ -1351,6 +1396,7 @@ body::after {
     var(--surface-raised);
   border: 1px solid color-mix(in srgb, var(--dispute) 45%, var(--border));
   border-bottom-right-radius: 2px;
+  box-shadow: var(--glow-dispute);
   color: var(--ink);
 }
 
@@ -3247,7 +3293,7 @@ details pre {
 .access-gate-card {
   width: min(100%, 28rem);
   padding: 1.75rem;
-  border-radius: 1rem;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border);
   background: var(--surface-card);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
@@ -3279,7 +3325,7 @@ details pre {
 .access-gate-card input {
   width: 100%;
   padding: 0.75rem 0.9rem;
-  border-radius: 0.65rem;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border);
   background: var(--surface-page);
   color: var(--ink);
@@ -3288,7 +3334,7 @@ details pre {
 .access-gate-card button {
   padding: 0.8rem 1rem;
   border: none;
-  border-radius: 0.65rem;
+  border-radius: var(--radius-md);
   background: var(--accent);
   color: #241708;
   font-weight: 700;
@@ -3298,4 +3344,55 @@ details pre {
 .access-gate-error {
   margin: 0;
   color: #ffb8a0;
+}
+
+/* Shared hover/press elevation for existing interactive elements — layered on
+   top of their individual color/background rules defined earlier in this file. */
+.new-conversation,
+.reindex-rulebook,
+.upload-btn,
+.bgg-lookup-btn,
+.ask-form button,
+.dispute-submit,
+.dispute-form-toggle,
+.open-library-btn,
+.quick-search-form button,
+.confirm-dialog-btn-cancel,
+.confirm-dialog-btn-confirm,
+.confirm-dialog-btn-danger,
+.mode-toggle button {
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease,
+    transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.new-conversation:hover:not(:disabled),
+.reindex-rulebook:hover:not(:disabled),
+.upload-btn:hover:not(:disabled),
+.bgg-lookup-btn:hover:not(:disabled),
+.ask-form button:hover:not(:disabled),
+.dispute-submit:hover:not(:disabled),
+.dispute-form-toggle:hover,
+.open-library-btn:hover,
+.quick-search-form button:hover:not(:disabled),
+.confirm-dialog-btn-confirm:hover,
+.confirm-dialog-btn-danger:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.new-conversation:active:not(:disabled),
+.reindex-rulebook:active:not(:disabled),
+.upload-btn:active:not(:disabled),
+.ask-form button:active:not(:disabled),
+.dispute-submit:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.book-list li button:first-child:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+.citation-link:hover {
+  box-shadow: var(--shadow-sm);
 }
