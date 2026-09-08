@@ -1679,7 +1679,7 @@ export default function App({
                         type="button"
                         role="tab"
                         aria-selected={chatMode === "search"}
-                        className={chatMode === "search" ? "active" : ""}
+                        className={chatMode === "search" ? "active mode-tab-search" : ""}
                         onClick={() => setChatMode("search")}
                       >
                         <IconSearch className="icon icon-xs" />
@@ -1689,7 +1689,7 @@ export default function App({
                         type="button"
                         role="tab"
                         aria-selected={chatMode === "dispute"}
-                        className={chatMode === "dispute" ? "active" : ""}
+                        className={chatMode === "dispute" ? "active mode-tab-dispute" : ""}
                         onClick={() => setChatMode("dispute")}
                       >
                         <IconMeeple className="icon icon-xs" />
@@ -1699,7 +1699,7 @@ export default function App({
                         type="button"
                         role="tab"
                         aria-selected={chatMode === "reference"}
-                        className={chatMode === "reference" ? "active" : ""}
+                        className={chatMode === "reference" ? "active mode-tab-reference" : ""}
                         onClick={() => setChatMode("reference")}
                       >
                         <IconTrophy className="icon icon-xs" />
