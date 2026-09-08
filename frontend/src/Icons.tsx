@@ -113,6 +113,34 @@ export function IconDice({ className }: IconProps) {
   );
 }
 
+export function IconSearch({ className }: IconProps) {
+  return (
+    <Icon className={className}>
+      <circle cx="10.5" cy="10.5" r="6.5" />
+      <path d="m20 20-4.8-4.8" />
+    </Icon>
+  );
+}
+
+export function IconMeeple({ className }: IconProps) {
+  return (
+    <Icon className={className}>
+      <circle cx="12" cy="5.5" r="2.5" />
+      <path d="M9 10h6l2.5 5.5h-3.2V21h-4.6v-5.5H6.5Z" />
+    </Icon>
+  );
+}
+
+export function IconCards({ className }: IconProps) {
+  return (
+    <Icon className={className}>
+      <rect x="3" y="7" width="11" height="14" rx="1.75" transform="rotate(-8 8.5 14)" />
+      <rect x="9" y="4" width="11" height="14" rx="1.75" />
+      <circle cx="14.5" cy="8.2" r="1" fill="currentColor" stroke="none" />
+    </Icon>
+  );
+}
+
 export function IconLayoutGrid({ className }: IconProps) {
   return (
     <Icon className={className}>

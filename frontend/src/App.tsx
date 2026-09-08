@@ -34,8 +34,11 @@ import {
   IconDice,
   IconLibrary,
   IconMenu,
+  IconMeeple,
   IconPin,
   IconScales,
+  IconSearch,
+  IconTrophy,
   IconUpload,
 } from "./Icons";
 import {
@@ -1669,6 +1672,7 @@ export default function App({
                         className={chatMode === "ask" ? "active" : ""}
                         onClick={() => setChatMode("ask")}
                       >
+                        <IconScales className="icon icon-xs" />
                         Ask
                       </button>
                       <button
@@ -1678,6 +1682,7 @@ export default function App({
                         className={chatMode === "search" ? "active" : ""}
                         onClick={() => setChatMode("search")}
                       >
+                        <IconSearch className="icon icon-xs" />
                         Search
                       </button>
                       <button
@@ -1687,6 +1692,7 @@ export default function App({
                         className={chatMode === "dispute" ? "active" : ""}
                         onClick={() => setChatMode("dispute")}
                       >
+                        <IconMeeple className="icon icon-xs" />
                         Dispute
                       </button>
                       <button
@@ -1696,6 +1702,7 @@ export default function App({
                         className={chatMode === "reference" ? "active" : ""}
                         onClick={() => setChatMode("reference")}
                       >
+                        <IconTrophy className="icon icon-xs" />
                         Reference
                       </button>
                     </div>
